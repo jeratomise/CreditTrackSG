@@ -11,7 +11,7 @@ import { Bill } from './types';
 import { EmailLogs } from './components/EmailLogs';
 import {
   LayoutDashboard, PieChart, Settings as SettingsIcon, Shield, LogOut,
-  LockKeyhole, Mail, Plus, X, Upload, ChevronRight, User
+  LockKeyhole, Mail, Plus, X, Upload, ChevronRight, User, Sparkles
 } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
 import { dbService } from './services/dbService';
@@ -200,7 +200,11 @@ const App: React.FC = () => {
           <div className="relative" ref={avatarRef}>
             <button
               onClick={() => setIsAvatarMenuOpen(!isAvatarMenuOpen)}
-              className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm border-2 border-indigo-200"
+              className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 ${
+                user.role === 'pro'
+                  ? 'bg-amber-100 text-amber-800 border-amber-400'
+                  : 'bg-indigo-100 text-indigo-700 border-indigo-200'
+              }`}
             >
               {user.name.charAt(0).toUpperCase()}
             </button>
@@ -210,11 +214,29 @@ const App: React.FC = () => {
                 <div className="p-4 border-b border-gray-100 bg-indigo-50/50">
                   <p className="text-sm font-semibold text-gray-900 truncate">{user.name}</p>
                   <p className="text-xs text-gray-500 truncate">{user.email}</p>
-                  {user.role === 'admin' && (
-                    <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded mt-1 inline-block">ADMIN</span>
-                  )}
+                  <div className="flex gap-1 mt-1 flex-wrap">
+                    {user.role === 'admin' && (
+                      <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-semibold">ADMIN</span>
+                    )}
+                    {user.role === 'pro' && (
+                      <span className="text-[10px] bg-gradient-to-r from-amber-400 to-yellow-300 text-amber-900 px-1.5 py-0.5 rounded font-bold">⭐ PRO</span>
+                    )}
+                    {user.role === 'user' && (
+                      <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-semibold">FREE</span>
+                    )}
+                  </div>
                 </div>
                 <div className="p-2">
+                  {user.role === 'user' && (
+                    <button
+                      onClick={() => { setView('settings'); setIsAvatarMenuOpen(false); }}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 mb-1 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white text-sm font-bold rounded-lg transition-colors"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Upgrade to Pro
+                      <ChevronRight className="w-3 h-3 ml-auto opacity-70" />
+                    </button>
+                  )}
                   {user.role === 'admin' && (
                     <button
                       onClick={() => { setView('admin'); setIsAvatarMenuOpen(false); }}
@@ -250,19 +272,32 @@ const App: React.FC = () => {
             <span className="text-xs text-gray-400 ml-10">EliteX.CC Group</span>
           </div>
 
-          <div className="px-6 py-4">
+          <div className="px-4 py-4 space-y-2">
             <div className="flex items-center gap-3 p-3 bg-indigo-50/50 rounded-xl border border-indigo-50">
-              <div className="w-8 h-8 rounded-full bg-indigo-200 flex items-center justify-center text-indigo-700 font-bold">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${user.role === 'pro' ? 'bg-amber-100 text-amber-800' : 'bg-indigo-200 text-indigo-700'}`}>
                 {user.name.charAt(0).toUpperCase()}
               </div>
-              <div className="overflow-hidden">
-                <p className="text-sm font-semibold text-gray-900 truncate">{user.name}</p>
-                <div className="flex items-center gap-1">
-                  <p className="text-xs text-gray-500 truncate">{user.email}</p>
-                  {user.role === 'admin' && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1 rounded">ADMIN</span>}
+              <div className="overflow-hidden flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{user.name}</p>
+                  {user.role === 'admin' && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1 rounded font-semibold shrink-0">ADMIN</span>}
+                  {user.role === 'pro' && <span className="text-[10px] bg-gradient-to-r from-amber-400 to-yellow-300 text-amber-900 px-1 rounded font-bold shrink-0">⭐ PRO</span>}
+                  {user.role === 'user' && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-semibold shrink-0">FREE</span>}
                 </div>
+                <p className="text-xs text-gray-500 truncate">{user.email}</p>
               </div>
             </div>
+
+            {/* Upgrade CTA — free users only */}
+            {user.role === 'user' && (
+              <button
+                onClick={() => setView('settings')}
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-bold px-3 py-2.5 rounded-xl transition-all shadow-md shadow-indigo-200"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Upgrade to Pro — $2.99/mo
+              </button>
+            )}
           </div>
 
           <nav className="p-4 space-y-2 flex-1">
@@ -321,9 +356,35 @@ const App: React.FC = () => {
         <main className="flex-1 lg:ml-64 p-4 lg:p-8 max-w-7xl mx-auto w-full pb-24 lg:pb-8">
           {view === 'dashboard' && (
             <div className="space-y-8 animate-fade-in">
+              {/* Upgrade banner — free users only */}
+              {user.role === 'user' && (
+                <div className="flex items-center justify-between gap-3 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-xl px-4 py-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
+                    <p className="text-sm text-indigo-700 font-medium truncate">
+                      <span className="font-bold">You're on Free</span> — DBS only, 3 uploads/month.{' '}
+                      <span className="hidden sm:inline text-indigo-500">Unlock all 7 banks, unlimited uploads & full analytics.</span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setView('settings')}
+                    className="shrink-0 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    Upgrade →
+                  </button>
+                </div>
+              )}
+
               <header className="flex justify-between items-center">
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">Financial Overview</h1>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <h1 className="text-2xl font-bold text-gray-900">Financial Overview</h1>
+                    {user.role === 'pro' && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-gradient-to-r from-amber-400 to-yellow-300 text-amber-900 shadow-sm">
+                        ⭐ PRO
+                      </span>
+                    )}
+                  </div>
                   <p className="text-gray-500 text-sm">Welcome back, {user.name}. Here is your 2026 summary.</p>
                 </div>
                 <div className="hidden md:flex items-center gap-3">

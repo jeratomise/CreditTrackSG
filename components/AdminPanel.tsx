@@ -5,7 +5,7 @@ import { User, SystemConfig } from '../types';
 import { Users, Shield, Save, Type, Trash2, Power, LayoutTemplate, Plus } from 'lucide-react';
 
 export const AdminPanel: React.FC = () => {
-  const { user, getAllUsers, toggleUserStatus, systemConfig, updateSystemConfig } = useAuth();
+  const { user, getAllUsers, toggleUserStatus, updateUserRole, systemConfig, updateSystemConfig } = useAuth();
   const [activeTab, setActiveTab] = useState<'users' | 'cms'>('users');
   const [usersList, setUsersList] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -42,7 +42,12 @@ export const AdminPanel: React.FC = () => {
 
   const handleToggleStatus = async (userId: string) => {
       await toggleUserStatus(userId);
-      await loadUsers(); // Refresh list
+      await loadUsers();
+  };
+
+  const handleRoleChange = async (userId: string, newRole: 'user' | 'pro') => {
+      await updateUserRole(userId, newRole);
+      await loadUsers();
   };
 
   const handleCmsSave = async (e: React.FormEvent) => {
@@ -133,11 +138,24 @@ export const AdminPanel: React.FC = () => {
                                         <div className="text-xs text-gray-400">{u.email}</div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className={`px-2 py-1 rounded text-xs font-medium uppercase ${
-                                            u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
-                                        }`}>
-                                            {u.role}
-                                        </span>
+                                        {u.role === 'admin' ? (
+                                            <span className="px-2 py-1 rounded text-xs font-medium uppercase bg-purple-100 text-purple-700">
+                                                Admin
+                                            </span>
+                                        ) : (
+                                            <select
+                                                value={u.role}
+                                                onChange={e => handleRoleChange(u.id, e.target.value as 'user' | 'pro')}
+                                                className={`text-xs font-semibold px-2 py-1 rounded border cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
+                                                    u.role === 'pro'
+                                                        ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                                        : 'bg-gray-100 text-gray-600 border-gray-200'
+                                                }`}
+                                            >
+                                                <option value="user">Free</option>
+                                                <option value="pro">Pro</option>
+                                            </select>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4">
                                         {(() => {

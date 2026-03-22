@@ -1,6 +1,7 @@
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import Stripe from "stripe";
 
 // Initialize Supabase client for the backend
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
@@ -10,6 +11,10 @@ let supabase: any = null;
 if (supabaseUrl && supabaseKey) {
   supabase = createClient(supabaseUrl, supabaseKey);
 }
+
+// Initialize Stripe
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
+const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 
 // Initialize Resend — RESEND_API_KEY must be set in environment variables
 if (!process.env.RESEND_API_KEY) {
@@ -274,10 +279,145 @@ async function runWeeklyUpdate(testUserId?: string) {
 }
 
 const app = express();
+
+// ── Stripe webhook MUST use raw body — register before express.json() ──
+app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'] as string;
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!stripe || !webhookSecret) {
+    return res.status(500).json({ error: 'Stripe not configured' });
+  }
+
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+  } catch (err: any) {
+    console.error('Webhook signature verification failed:', err.message);
+    return res.status(400).json({ error: `Webhook error: ${err.message}` });
+  }
+
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const userId = session.client_reference_id;
+      const customerId = session.customer as string;
+      const subscriptionId = session.subscription as string;
+
+      if (userId && supabase) {
+        await supabase.from('profiles').update({
+          role: 'pro',
+          stripe_customer_id: customerId,
+          stripe_subscription_id: subscriptionId,
+        }).eq('id', userId);
+        console.log(`User ${userId} upgraded to Pro via Stripe`);
+      }
+    }
+
+    if (event.type === 'customer.subscription.deleted') {
+      const subscription = event.data.object as Stripe.Subscription;
+      const customerId = subscription.customer as string;
+
+      if (supabase) {
+        await supabase.from('profiles').update({
+          role: 'user',
+          stripe_subscription_id: null,
+        }).eq('stripe_customer_id', customerId);
+        console.log(`Customer ${customerId} subscription cancelled — downgraded to Free`);
+      }
+    }
+
+    if (event.type === 'customer.subscription.updated') {
+      const subscription = event.data.object as Stripe.Subscription;
+      const customerId = subscription.customer as string;
+      // If subscription becomes past_due or unpaid, downgrade
+      if (['past_due', 'unpaid', 'canceled'].includes(subscription.status)) {
+        if (supabase) {
+          await supabase.from('profiles').update({ role: 'user' }).eq('stripe_customer_id', customerId);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error('Webhook handler error:', err.message);
+    return res.status(500).json({ error: 'Webhook handler failed' });
+  }
+
+  res.json({ received: true });
+});
+
 app.use(express.json());
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
+});
+
+// Create a Stripe Checkout session for Pro plan
+app.post('/api/create-checkout-session', async (req, res) => {
+  const { userId, userEmail, billingCycle } = req.body;
+
+  if (!stripe) return res.status(500).json({ error: 'Stripe not configured' });
+  if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+  const priceId = billingCycle === 'annual'
+    ? process.env.STRIPE_PRO_PRICE_ID_ANNUAL
+    : process.env.STRIPE_PRO_PRICE_ID_MONTHLY;
+
+  if (!priceId) return res.status(500).json({ error: `STRIPE_PRO_PRICE_ID_${(billingCycle || 'monthly').toUpperCase()} is not set in environment variables` });
+
+  const appUrl = process.env.APP_URL || 'https://credittrack.elitex.cc';
+
+  try {
+    // Check if user already has a Stripe customer
+    let customerId: string | undefined;
+    if (supabase) {
+      const { data: profile } = await supabase.from('profiles').select('stripe_customer_id').eq('id', userId).single();
+      if (profile?.stripe_customer_id) customerId = profile.stripe_customer_id;
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      customer: customerId,
+      customer_email: customerId ? undefined : userEmail,
+      client_reference_id: userId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${appUrl}?upgraded=true`,
+      cancel_url: `${appUrl}?upgrade=cancelled`,
+      subscription_data: {
+        metadata: { userId },
+      },
+    });
+
+    res.json({ url: session.url });
+  } catch (err: any) {
+    console.error('Checkout session error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create a Stripe Customer Portal session (manage/cancel subscription)
+app.post('/api/create-portal-session', async (req, res) => {
+  const { userId } = req.body;
+
+  if (!stripe) return res.status(500).json({ error: 'Stripe not configured' });
+  if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+  const appUrl = process.env.APP_URL || 'https://credittrack.elitex.cc';
+
+  try {
+    const { data: profile } = await supabase.from('profiles').select('stripe_customer_id').eq('id', userId).single();
+    if (!profile?.stripe_customer_id) return res.status(400).json({ error: 'No Stripe customer found for this user' });
+
+    const portalSession = await stripe.billingPortal.sessions.create({
+      customer: profile.stripe_customer_id,
+      return_url: appUrl,
+    });
+
+    res.json({ url: portalSession.url });
+  } catch (err: any) {
+    console.error('Portal session error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Backend status check: Supabase, Resend, Gemini
