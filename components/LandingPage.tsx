@@ -233,7 +233,7 @@ export const LandingPage: React.FC = () => {
       </div>
 
       {/* ── RIGHT COLUMN: Auth ── */}
-      <div className="lg:w-[42%] bg-[#080b12] flex items-center justify-center p-8 lg:p-12 relative">
+      <div className="lg:w-[42%] bg-[#080b12] flex items-start justify-center p-8 lg:p-12 lg:pt-20 relative">
         <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/5 via-transparent to-transparent pointer-events-none" />
 
         <div className="w-full max-w-sm relative z-10">
