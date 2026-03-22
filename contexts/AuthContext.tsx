@@ -14,6 +14,7 @@ interface AuthContextType {
   loading: boolean;
   getAllUsers: () => Promise<User[]>;
   toggleUserStatus: (userId: string) => Promise<void>;
+  updateUserRole: (userId: string, role: 'user' | 'pro') => Promise<void>;
   updateSystemConfig: (config: SystemConfig) => Promise<void>;
   changePassword: (password: string) => Promise<void>;
 }
@@ -119,7 +120,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 id: data.id,
                 email: data.email,
                 name: data.name,
-                role: data.role as 'admin' | 'user',
+                role: data.role as 'admin' | 'user' | 'pro',
                 joinedAt: data.created_at,
                 status: data.status as 'active' | 'suspended'
             });
@@ -144,13 +145,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       options: { data: { name } }
     });
     if (error) throw error;
-    if (data.user) {
+    // data.session is null when email confirmation is required — insert profile only if we have a live session
+    if (data.user && data.session) {
         await supabase.from('profiles').insert({
             id: data.user.id,
             email: email,
             name: name,
             role: email === 'jeratomise@gmail.com' ? 'admin' : 'user'
         });
+    } else if (data.user && !data.session) {
+        // Email confirmation is enabled — surface a clear message to the caller
+        throw new Error('CHECK_EMAIL');
     }
   };
 
@@ -185,6 +190,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) throw error;
   };
 
+  const updateUserRole = async (userId: string, role: 'user' | 'pro') => {
+      const { error } = await supabase.from('profiles').update({ role }).eq('id', userId);
+      if (error) throw error;
+  };
+
   const updateSystemConfig = async (config: SystemConfig) => {
       await dbService.updateSystemConfig(config);
       setSystemConfig(config);
@@ -206,6 +216,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         getAllUsers,
         toggleUserStatus,
+        updateUserRole,
         updateSystemConfig,
         changePassword
     }}>

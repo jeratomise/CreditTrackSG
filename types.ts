@@ -14,7 +14,7 @@ export interface User {
   name: string;
   email: string;
   joinedAt: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'user' | 'pro';
   status: 'active' | 'suspended';
 }
 

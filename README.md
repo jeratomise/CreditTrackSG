@@ -78,18 +78,19 @@ Browser (React SPA)
 Copy `.env.example` to `.env` and fill in your own values:
 
 ```bash
-# Supabase (frontend)
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
+# Supabase — the VITE_ and non-VITE_ variables are the SAME credentials, declared twice.
+# Vite only exposes variables prefixed with VITE_ to the browser (via import.meta.env).
+# Express reads variables without the prefix via process.env.
+# On Vercel, set both names to the same value in your project settings.
+VITE_SUPABASE_URL=        # e.g. https://xxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=   # your Supabase anon/public key
+SUPABASE_URL=             # same value as VITE_SUPABASE_URL
+SUPABASE_ANON_KEY=        # same value as VITE_SUPABASE_ANON_KEY
 
-# Supabase (backend)
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
-
-# Gemini AI
+# Gemini AI (server-side only — keep this secret)
 VITE_GEMINI_API_KEY=
 
-# Resend email
+# Resend email (server-side only)
 RESEND_API_KEY=
 EMAIL_FROM=
 
