@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   Shield, ArrowRight, Loader2, Zap, BarChart2, Bell,
   CreditCard, ChevronLeft, Users, CheckCircle, Upload,
-  Sparkles, TrendingUp, Smartphone
+  Sparkles, TrendingUp, Smartphone, X
 } from 'lucide-react';
 
 type AuthMode = 'login' | 'signup' | 'forgot';
@@ -70,6 +70,117 @@ const STATS = [
   { value: 'AI', label: 'Powered Extraction' },
   { value: '📱', label: 'Mobile-First Design' },
 ];
+
+const PRICING_ROWS = [
+  { label: 'Bill uploads',          free: '3 / month',     pro: 'Unlimited' },
+  { label: 'Statement history',     free: 'Last 90 days',  pro: 'All time' },
+  { label: 'AI Miles Optimisation', free: '1× / month',    pro: 'Unlimited, real-time' },
+  { label: 'Smart email reminders', free: false,           pro: true },
+  { label: 'Banks supported',       free: 'DBS & UOB',     pro: 'All 7+ banks' },
+  { label: 'Spend analytics',       free: 'KPIs only',     pro: 'Full charts & trends' },
+  { label: 'Camera bill capture',   free: false,           pro: true },
+  { label: 'Multi-device sync',     free: false,           pro: true },
+  { label: 'Support',               free: '—',             pro: 'Priority' },
+];
+
+const PricingTable: React.FC = () => {
+  const [annual, setAnnual] = useState(true);
+
+  const proMonthly = 4.00;
+  const proAnnual  = 1.99;
+  const displayed  = annual ? proAnnual : proMonthly;
+  const saving     = Math.round((1 - (proAnnual * 12) / (proMonthly * 12)) * 100);
+
+  const Cell = ({ value }: { value: string | boolean }) => {
+    if (value === true)  return <CheckCircle className="w-4 h-4 text-indigo-400 mx-auto" />;
+    if (value === false) return <X className="w-4 h-4 text-slate-700 mx-auto" />;
+    return <span className="text-xs text-slate-400">{value}</span>;
+  };
+
+  return (
+    <div className="mb-10">
+      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600 mb-6">Pricing</p>
+
+      {/* Toggle */}
+      <div className="flex items-center gap-3 mb-6">
+        <span className={`text-sm font-medium transition-colors ${!annual ? 'text-white' : 'text-slate-500'}`}>Monthly</span>
+        <button
+          onClick={() => setAnnual(!annual)}
+          className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${annual ? 'bg-indigo-600' : 'bg-slate-700'}`}
+        >
+          <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${annual ? 'left-7' : 'left-1'}`} />
+        </button>
+        <span className={`text-sm font-medium transition-colors ${annual ? 'text-white' : 'text-slate-500'}`}>
+          Annual
+          {annual && (
+            <span className="ml-2 text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full">
+              SAVE {saving}%
+            </span>
+          )}
+        </span>
+      </div>
+
+      {/* Cards + Table */}
+      <div className="rounded-2xl border border-white/[0.07] overflow-hidden">
+        {/* Header row */}
+        <div className="grid grid-cols-3 bg-white/[0.03]">
+          <div className="p-4 border-r border-white/[0.06]">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Feature</p>
+          </div>
+          {/* Free */}
+          <div className="p-4 border-r border-white/[0.06] text-center">
+            <p className="text-xs font-bold text-slate-400 mb-1">Free</p>
+            <p className="text-2xl font-black text-white">$0</p>
+            <p className="text-[10px] text-slate-600">forever</p>
+          </div>
+          {/* Pro */}
+          <div className="p-4 text-center bg-indigo-600/10 relative">
+            <div className="absolute top-2 right-2 text-[9px] font-black bg-indigo-500 text-white px-2 py-0.5 rounded-full tracking-wide">
+              {annual ? 'LAUNCH PRICE' : 'POPULAR'}
+            </div>
+            <p className="text-xs font-bold text-indigo-400 mb-1">Pro</p>
+            <div className="flex items-baseline justify-center gap-1">
+              <p className="text-2xl font-black text-white">${displayed.toFixed(2)}</p>
+              <span className="text-[10px] text-slate-500">/ mo</span>
+            </div>
+            <p className="text-[10px] text-slate-500">
+              {annual ? `billed $${(proAnnual * 12).toFixed(2)} / year` : 'billed monthly'}
+            </p>
+          </div>
+        </div>
+
+        {/* Feature rows */}
+        {PRICING_ROWS.map((row, i) => (
+          <div
+            key={row.label}
+            className={`grid grid-cols-3 border-t border-white/[0.04] ${i % 2 === 0 ? '' : 'bg-white/[0.015]'}`}
+          >
+            <div className="px-4 py-3 border-r border-white/[0.04] flex items-center">
+              <span className="text-xs text-slate-400">{row.label}</span>
+            </div>
+            <div className="px-4 py-3 border-r border-white/[0.04] flex items-center justify-center">
+              <Cell value={row.free} />
+            </div>
+            <div className="px-4 py-3 flex items-center justify-center bg-indigo-600/5">
+              <Cell value={row.pro} />
+            </div>
+          </div>
+        ))}
+
+        {/* CTA row */}
+        <div className="grid grid-cols-3 border-t border-white/[0.07] bg-white/[0.02]">
+          <div className="p-4 border-r border-white/[0.06]" />
+          <div className="p-4 border-r border-white/[0.06] flex items-center justify-center">
+            <span className="text-xs text-slate-600 font-medium">No card needed</span>
+          </div>
+          <div className="p-4 flex items-center justify-center bg-indigo-600/10">
+            <span className="text-xs text-indigo-400 font-bold">Coming soon →</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export const LandingPage: React.FC = () => {
   const { login, signup, resetPassword, systemConfig } = useAuth();
@@ -207,7 +318,7 @@ export const LandingPage: React.FC = () => {
           </div>
 
           {/* Banks supported */}
-          <div>
+          <div className="mb-10">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600 mb-4">Supported Banks</p>
             <div className="flex flex-wrap gap-2">
               {BANKS.map(b => (
@@ -220,6 +331,9 @@ export const LandingPage: React.FC = () => {
               ))}
             </div>
           </div>
+
+          {/* Pricing */}
+          <PricingTable />
         </div>
 
         {/* Footer */}
