@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+
+.vercel
+
+# AI prompt history — may contain secrets entered during development
+migrated_prompt_history/
+CreditTrackSG-main/
+
+# Claude Code local settings — may contain bash permission history with secrets
+.claude/
