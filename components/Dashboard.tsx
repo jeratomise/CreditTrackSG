@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Bill, PaymentDetails } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer, Tooltip } from 'recharts';
-import { AlertTriangle, CheckCircle, Clock, Plus, Filter, TrendingUp, Pencil, FileText, ExternalLink, Calendar, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, Plus, Filter, TrendingUp, Pencil, FileText, ExternalLink, Calendar, Trash2, ArrowDownWideNarrow, ArrowUpWideNarrow } from 'lucide-react';
 import { PaymentModal } from './PaymentModal';
 import { EditBillModal } from './EditBillModal';
 import { AlertModal } from './AlertModal';
@@ -33,6 +33,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
   const [selectedBillForPayment, setSelectedBillForPayment] = useState<Bill | null>(null);
   const [billToEdit, setBillToEdit] = useState<Bill | null>(null);
   const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>('ALL');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [billToDelete, setBillToDelete] = useState<string | null>(null);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
 
@@ -125,9 +126,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
   }, [bills]);
 
   const filteredBills = useMemo(() => {
-    if (selectedMonthFilter === 'ALL') return bills;
-    return bills.filter(b => b.dueDate.startsWith(selectedMonthFilter));
-  }, [bills, selectedMonthFilter]);
+    const base = selectedMonthFilter === 'ALL'
+      ? bills
+      : bills.filter(b => b.dueDate.startsWith(selectedMonthFilter));
+    const dir = sortOrder === 'desc' ? -1 : 1;
+    return [...base].sort((a, b) =>
+      dir * (new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+    );
+  }, [bills, selectedMonthFilter, sortOrder]);
 
   const handlePaymentConfirm = (billId: string, details: PaymentDetails) => {
     const billToUpdate = bills.find(b => b.id === billId);
@@ -395,13 +401,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
                   )}
               </div>
               
-              <button
-                onClick={() => onOpenManualModal?.()}
-                className="flex items-center gap-2 text-sm bg-indigo-50 text-indigo-600 px-3 py-2 rounded-lg hover:bg-indigo-100 font-medium transition-colors whitespace-nowrap"
-              >
-                <Plus className="w-4 h-4" />
-                Add Manual Bill
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSortOrder(s => (s === 'desc' ? 'asc' : 'desc'))}
+                  title={sortOrder === 'desc' ? 'Newest first (click for oldest first)' : 'Oldest first (click for newest first)'}
+                  className="flex items-center gap-2 text-sm bg-gray-50 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-100 font-medium transition-colors whitespace-nowrap"
+                >
+                  {sortOrder === 'desc' ? (
+                    <ArrowDownWideNarrow className="w-4 h-4" />
+                  ) : (
+                    <ArrowUpWideNarrow className="w-4 h-4" />
+                  )}
+                  {sortOrder === 'desc' ? 'Newest first' : 'Oldest first'}
+                </button>
+                <button
+                  onClick={() => onOpenManualModal?.()}
+                  className="flex items-center gap-2 text-sm bg-indigo-50 text-indigo-600 px-3 py-2 rounded-lg hover:bg-indigo-100 font-medium transition-colors whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Manual Bill
+                </button>
+              </div>
           </div>
           
           {/* Mobile Card View */}
