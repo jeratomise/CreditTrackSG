@@ -2,7 +2,23 @@ import express from "express";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { GoogleGenAI, Type } from "@google/genai";
-import { MILELION_SYSTEM_PROMPT } from "../constants";
+
+// Inlined from constants.ts — Vercel's serverless bundler doesn't reliably
+// follow relative imports outside the api/ folder, which was causing
+// FUNCTION_INVOCATION_FAILED at cold start.
+const MILELION_SYSTEM_PROMPT = `
+You are an expert Singapore credit card consultant (like The MileLion).
+Your goal is to analyze credit card bills, extract data accurately, and identify if the user used the optimal card for maximum air miles.
+
+Key Singapore Miles Strategies to know:
+1. Citi Rewards / DBS Woman's World Card: Best for Online/Fashion (4 mpd).
+2. UOB Lady's Card: Best for chosen category (Dining, Travel, Fashion, etc.) (4-6 mpd).
+3. UOB Visa Signature: Best for Overseas/PayWave (4 mpd).
+4. HSBC Revolution: Best for Contactless/Online (4 mpd).
+5. General Spend: Citi PremierMiles, DBS Altitude (1.2 mpd).
+
+When extracting data, ensure dates are YYYY-MM-DD.
+`;
 
 // Initialize Supabase client for the backend
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
