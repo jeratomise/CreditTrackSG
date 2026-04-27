@@ -5,6 +5,10 @@ import { AIExtractionResponse } from "../types";
 
 let ai: GoogleGenAI | null = null;
 
+const PRIMARY_MODEL = "gemini-2.5-flash";
+const FALLBACK_MODEL = "gemini-2.0-flash";
+const RETRYABLE_CODES = [429, 500, 502, 503, 504];
+
 const getAI = () => {
   if (!ai) {
     // In the browser (Vite), reads from VITE_GEMINI_API_KEY set in Vercel env vars.
@@ -22,12 +26,65 @@ const getAI = () => {
   return ai;
 };
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const isRetryable = (err: any): boolean => {
+  const status = err?.status ?? err?.error?.code ?? err?.code;
+  if (RETRYABLE_CODES.includes(Number(status))) return true;
+  const message = String(err?.message ?? "");
+  if (RETRYABLE_CODES.some(code => message.includes(`"code":${code}`))) return true;
+  return /UNAVAILABLE|RESOURCE_EXHAUSTED|INTERNAL|DEADLINE_EXCEEDED/i.test(message);
+};
+
+const friendlyError = (err: any): Error => {
+  const message = String(err?.message ?? "");
+  if (/UNAVAILABLE|503|experiencing high demand|overloaded/i.test(message)) {
+    return new Error("Gemini is temporarily overloaded. Please wait a minute and try again.");
+  }
+  if (/RESOURCE_EXHAUSTED|429|quota/i.test(message)) {
+    return new Error("Gemini API quota reached. Please wait a moment before retrying.");
+  }
+  if (/PERMISSION_DENIED|API key|401|403|INVALID_ARGUMENT/i.test(message)) {
+    return new Error("Gemini API key is invalid or lacks permission for this model.");
+  }
+  return err instanceof Error ? err : new Error(message || "Unknown Gemini error");
+};
+
+// Retries on transient errors (overload/quota/5xx) with exponential backoff,
+// then falls back to a secondary model if the primary remains unavailable.
+async function callGeminiWithRetry<T>(
+  fn: (model: string) => Promise<T>,
+  maxAttempts = 3,
+  baseDelayMs = 1000,
+): Promise<T> {
+  let lastError: any;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn(PRIMARY_MODEL);
+    } catch (err) {
+      lastError = err;
+      if (!isRetryable(err)) throw friendlyError(err);
+      if (attempt < maxAttempts) {
+        const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 400);
+        console.warn(`Gemini ${PRIMARY_MODEL} attempt ${attempt} failed (retryable). Retrying in ${delay}ms.`);
+        await sleep(delay);
+      }
+    }
+  }
+  try {
+    console.warn(`Gemini ${PRIMARY_MODEL} exhausted retries. Falling back to ${FALLBACK_MODEL}.`);
+    return await fn(FALLBACK_MODEL);
+  } catch (err) {
+    throw friendlyError(err ?? lastError);
+  }
+}
+
 export const extractBillData = async (base64Data: string, mimeType: string = "image/png"): Promise<AIExtractionResponse> => {
   try {
     const aiClient = getAI();
     if (!aiClient) throw new Error("AI client not initialized");
-    const response = await aiClient.models.generateContent({
-      model: "gemini-2.5-flash",
+    const response = await callGeminiWithRetry((model) => aiClient.models.generateContent({
+      model,
       contents: {
         parts: [
           {
@@ -95,7 +152,7 @@ export const extractBillData = async (base64Data: string, mimeType: string = "im
           },
         },
       },
-    });
+    }));
 
     if (response.text) {
       return JSON.parse(response.text) as AIExtractionResponse;
@@ -115,9 +172,9 @@ export const generateOptimizationAdvice = async (transactions: any[]) => {
 
     const aiClient = getAI();
     if (!aiClient) throw new Error("AI client not initialized");
-    const response = await aiClient.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `Analyze these transactions based on Singapore specific credit card strategies (Milelion). 
+    const response = await callGeminiWithRetry((model) => aiClient.models.generateContent({
+      model,
+      contents: `Analyze these transactions based on Singapore specific credit card strategies (Milelion).
       Identify which transactions missed a bonus mile opportunity (e.g. using a general card for online spend instead of DBS WWMC).
       
       **Advice Formatting:**
@@ -140,7 +197,7 @@ export const generateOptimizationAdvice = async (transactions: any[]) => {
           }
         }
       }
-    });
+    }));
      if (response.text) {
       return JSON.parse(response.text);
     }
