@@ -297,7 +297,7 @@ app.use(express.json({ limit: "20mb" }));
 
 // --- Gemini client + retry/fallback (server-side only — key stays out of browser bundle) ---
 const PRIMARY_MODEL = "gemini-2.5-flash";
-const FALLBACK_MODEL = "gemini-2.0-flash";
+const FALLBACK_MODEL = "gemini-2.5-pro";
 const RETRYABLE_CODES = [429, 500, 502, 503, 504];
 let geminiClient: GoogleGenAI | null = null;
 

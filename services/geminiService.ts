@@ -3,6 +3,7 @@ import { AIExtractionResponse } from "../types";
 import { supabase } from "../lib/supabaseClient";
 
 // Gemini calls now run on the server (api/server.ts) — this module is a thin
+//   Models in use (server-side): primary gemini-2.5-flash, fallback gemini-2.5-pro.
 // fetch wrapper. Reasons:
 //   1. Browser-originated calls to generativelanguage.googleapis.com were
 //      rejected with HTTP 405 (CORS preflight blocked by API key restrictions).
