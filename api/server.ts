@@ -1,6 +1,8 @@
 import express from "express";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { GoogleGenAI, Type } from "@google/genai";
+import { MILELION_SYSTEM_PROMPT } from "../constants";
 
 // Initialize Supabase client for the backend
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
@@ -274,10 +276,219 @@ async function runWeeklyUpdate(testUserId?: string) {
 }
 
 const app = express();
-app.use(express.json());
+// Bumped from default 100kb to 20mb so base64-encoded PDFs (up to ~10mb raw) fit.
+app.use(express.json({ limit: "20mb" }));
+
+// --- Gemini client + retry/fallback (server-side only — key stays out of browser bundle) ---
+const PRIMARY_MODEL = "gemini-2.5-flash";
+const FALLBACK_MODEL = "gemini-2.0-flash";
+const RETRYABLE_CODES = [429, 500, 502, 503, 504];
+let geminiClient: GoogleGenAI | null = null;
+
+function getGemini(): GoogleGenAI | null {
+  if (geminiClient) return geminiClient;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) {
+    console.error("Gemini API key missing. Set GEMINI_API_KEY in environment.");
+    return null;
+  }
+  geminiClient = new GoogleGenAI({ apiKey });
+  return geminiClient;
+}
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+function isRetryable(err: any): boolean {
+  const status = err?.status ?? err?.error?.code ?? err?.code;
+  if (RETRYABLE_CODES.includes(Number(status))) return true;
+  const msg = String(err?.message ?? "");
+  if (RETRYABLE_CODES.some(c => msg.includes(`"code":${c}`))) return true;
+  return /UNAVAILABLE|RESOURCE_EXHAUSTED|INTERNAL|DEADLINE_EXCEEDED/i.test(msg);
+}
+
+function friendlyMessage(err: any): string {
+  const msg = String(err?.message ?? "");
+  if (/UNAVAILABLE|503|overloaded|high demand/i.test(msg))
+    return "Gemini is temporarily overloaded. Please wait a minute and try again.";
+  if (/RESOURCE_EXHAUSTED|429|quota/i.test(msg))
+    return "Gemini API quota reached. Please wait a moment before retrying.";
+  if (/PERMISSION_DENIED|API key|401|403|INVALID_ARGUMENT/i.test(msg))
+    return "Gemini API key is invalid or lacks permission for this model.";
+  return msg || "Unknown Gemini error";
+}
+
+async function callGeminiWithRetry<T>(fn: (model: string) => Promise<T>, maxAttempts = 3, baseDelayMs = 1000): Promise<T> {
+  let lastError: any;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn(PRIMARY_MODEL);
+    } catch (err) {
+      lastError = err;
+      if (!isRetryable(err)) throw err;
+      if (attempt < maxAttempts) {
+        const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 400);
+        console.warn(`Gemini ${PRIMARY_MODEL} attempt ${attempt} failed (retryable). Retrying in ${delay}ms.`);
+        await sleep(delay);
+      }
+    }
+  }
+  console.warn(`Gemini ${PRIMARY_MODEL} exhausted retries. Falling back to ${FALLBACK_MODEL}.`);
+  try {
+    return await fn(FALLBACK_MODEL);
+  } catch (err) {
+    throw err ?? lastError;
+  }
+}
+
+// Verifies the caller is a logged-in Supabase user. Cheap protection so the
+// endpoint doesn't become an open Gemini proxy that anyone can burn quota on.
+async function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (!supabase) return res.status(500).json({ error: "Auth not initialized" });
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) return res.status(401).json({ error: "Missing bearer token" });
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data?.user) return res.status(401).json({ error: "Invalid session" });
+  next();
+}
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
+});
+
+// Bill statement extraction — moved server-side to avoid CORS/preflight rejection
+// from browser-originated calls and to keep the API key out of the JS bundle.
+app.post("/api/extract-bill", requireAuth, async (req, res) => {
+  const { base64Data, mimeType } = req.body || {};
+  if (!base64Data || typeof base64Data !== "string") {
+    return res.status(400).json({ error: "base64Data is required" });
+  }
+  const ai = getGemini();
+  if (!ai) return res.status(500).json({ error: "Gemini not configured" });
+
+  try {
+    const response = await callGeminiWithRetry(model => ai.models.generateContent({
+      model,
+      contents: {
+        parts: [
+          { inlineData: { mimeType: mimeType || "application/pdf", data: base64Data } },
+          {
+            text: `Analyze this credit card statement. It is likely a CONSOLIDATED STATEMENT containing multiple cards.
+
+            **CRITICAL: SPLIT BY CARD**
+            You must identify *every* distinct card in this document and create a separate bill entry for each.
+
+            **DBS / POSB INSTRUCTIONS:**
+            1.  **Find Card Headers**: Look for gray header bars or lines containing text like **"CARD NO.:"** (e.g., "DBS YUU AMERICAN EXPRESS CARD NO.: XXX", "DBS VANTAGE VISA INFINITE CARD NO.: XXX").
+            2.  **Separate Sections**: Treat each header as the start of a completely new bill.
+            3.  **Extract Specific Total**: For each card section, look for the **"SUB-TOTAL:"** or **"TOTAL:"** row *immediately following* that card's transaction list. Use this as the \`totalAmount\`. Do NOT use the document's Grand Total.
+            4.  **Date**: The "Payment Due Date" is usually common for all cards in the statement (at the top of Page 1). Use that.
+
+            **AMEX INSTRUCTIONS:**
+            - Look for "Closing Balance" on the first page.
+            - Date Format: Convert "DD.MM.YYYY" (e.g., 14.12.2025) strictly to "YYYY-MM-DD".
+
+            **GENERIC RULES:**
+            - **Transactions**: Assign transactions only to the card section they appear in.
+            - **Card Name**: Use the specific name found in the header (e.g., "DBS Woman's World Mastercard", "DBS Vantage Visa Infinite").
+
+            Return a JSON object with a 'bills' array containing one object per card found.`,
+          },
+        ],
+      },
+      config: {
+        systemInstruction: MILELION_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            bills: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  bankName: { type: Type.STRING },
+                  cardName: { type: Type.STRING },
+                  totalAmount: { type: Type.NUMBER },
+                  dueDate: { type: Type.STRING, description: "YYYY-MM-DD format" },
+                  statementDate: { type: Type.STRING, description: "YYYY-MM-DD format" },
+                  transactions: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        date: { type: Type.STRING, description: "YYYY-MM-DD format" },
+                        description: { type: Type.STRING },
+                        amount: { type: Type.NUMBER },
+                        category: { type: Type.STRING },
+                      },
+                    },
+                  },
+                },
+                required: ["bankName", "totalAmount", "dueDate", "transactions"],
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    if (!response.text) {
+      return res.status(502).json({ error: "Empty response from Gemini" });
+    }
+    const parsed = JSON.parse(response.text);
+    res.json(parsed);
+  } catch (err: any) {
+    console.error("extract-bill error:", err);
+    res.status(502).json({ error: friendlyMessage(err) });
+  }
+});
+
+// Optimization advice — also routed through the server for the same reasons.
+app.post("/api/optimize", requireAuth, async (req, res) => {
+  const { transactions } = req.body || {};
+  if (!Array.isArray(transactions) || transactions.length === 0) {
+    return res.json({ advice: "Upload bills to generate insights.", riskScore: 0, missedMiles: 0, anomalies: [] });
+  }
+  const ai = getGemini();
+  if (!ai) return res.status(500).json({ error: "Gemini not configured" });
+
+  try {
+    const response = await callGeminiWithRetry(model => ai.models.generateContent({
+      model,
+      contents: `Analyze these transactions based on Singapore specific credit card strategies (Milelion).
+      Identify which transactions missed a bonus mile opportunity (e.g. using a general card for online spend instead of DBS WWMC).
+
+      **Advice Formatting:**
+      Return the 'advice' field as a single string, but format it clearly as 3 distinct bullet points separated by newlines. Do not use markdown symbols like * or #. Start each point with a unicode bullet (•).
+
+      **Risk Score:**
+      Calculate a 'risk score' (0-100) based on potential for late fees or suboptimal card usage.
+
+      Transactions JSON: ${JSON.stringify(transactions)}`,
+      config: {
+        systemInstruction: MILELION_SYSTEM_PROMPT,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            advice: { type: Type.STRING, description: "3 bullet points starting with •, separated by newlines" },
+            riskScore: { type: Type.NUMBER },
+            missedMiles: { type: Type.NUMBER, description: "Estimated missed miles count" },
+            anomalies: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of unusual transactions" },
+          },
+        },
+      },
+    }));
+
+    if (!response.text) {
+      return res.json({ advice: "Could not generate advice.", riskScore: 0, missedMiles: 0, anomalies: [] });
+    }
+    res.json(JSON.parse(response.text));
+  } catch (err: any) {
+    console.error("optimize error:", err);
+    res.status(502).json({ error: friendlyMessage(err) });
+  }
 });
 
 // Backend status check: Supabase, Resend, Gemini
