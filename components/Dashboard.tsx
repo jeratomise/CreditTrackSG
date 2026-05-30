@@ -552,7 +552,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
                         <span>Due {formatDateForDisplay(bill.dueDate)}</span>
                       </div>
                       {!bill.isPaid && (
-                        <span className={`font-semibold ${daysLeft <= 3 ? 'text-red-500' : 'text-gray-500'}`}>
+                        <span className={`font-semibold ${
+                          getDaysRemaining(bill.dueDate) < 0 ? 'text-red-600'
+                          : getDaysRemaining(bill.dueDate) <= 3 ? 'text-amber-600'
+                          : 'text-gray-700'
+                        }`}>
                           {getUrgencyLabel(daysLeft)}
                         </span>
                       )}
@@ -634,7 +638,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
                                         <span>{formatDateForDisplay(bill.dueDate)}</span>
                                         {!bill.isPaid && (
                                             <span className={`text-[10px] font-bold uppercase ${
-                                                getDaysRemaining(bill.dueDate) <= 3 ? 'text-red-600' : 'text-gray-400'
+                                                getDaysRemaining(bill.dueDate) < 0 ? 'text-red-600'
+                                                : getDaysRemaining(bill.dueDate) <= 3 ? 'text-amber-600'
+                                                : 'text-gray-600'
                                             }`}>
                                                 {getDaysRemaining(bill.dueDate)} days left
                                             </span>
