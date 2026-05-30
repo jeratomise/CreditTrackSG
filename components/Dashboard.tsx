@@ -1,11 +1,12 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { Bill, PaymentDetails } from '../types';
+import { Bill, PaymentDetails, AnnualFee } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer, Tooltip } from 'recharts';
 import { AlertTriangle, CheckCircle, Clock, Plus, Filter, TrendingUp, Pencil, FileText, ExternalLink, Calendar, Trash2, ArrowDownWideNarrow, ArrowUpWideNarrow } from 'lucide-react';
 import { PaymentModal } from './PaymentModal';
 import { EditBillModal } from './EditBillModal';
 import { AlertModal } from './AlertModal';
+import { AnnualFeeAlert } from './AnnualFeeAlert';
 import { dbService } from '../services/dbService';
 
 interface DashboardProps {
@@ -36,6 +37,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [billToDelete, setBillToDelete] = useState<string | null>(null);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
+  const [annualFees, setAnnualFees] = useState<AnnualFee[]>([]);
+
+  useEffect(() => {
+    dbService.getAnnualFees().then(setAnnualFees).catch(console.error);
+  }, []);
 
   const totalDue = useMemo(() => 
     bills.filter(b => !b.isPaid).reduce((acc, b) => acc + b.totalAmount, 0), 
@@ -240,6 +246,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
           </div>
         </div>
       </div>
+
+      {/* Annual Fee Alerts */}
+      <AnnualFeeAlert fees={annualFees} onFeesUpdated={setAnnualFees} />
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

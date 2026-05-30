@@ -100,3 +100,16 @@ export interface EmailLog {
   sent_at: string;
   details: any;
 }
+
+export interface AnnualFee {
+  id: string;
+  userId: string;
+  bankName: string;
+  cardName: string;
+  amount: number;
+  chargeMonth: number;
+  chargeYear: number;
+  isRecurring: boolean;
+  lastSeenAt: string;
+  createdAt: string;
+}

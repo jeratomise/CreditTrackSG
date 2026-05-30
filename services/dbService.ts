@@ -1,6 +1,6 @@
 
 import { supabase } from '../lib/supabaseClient';
-import { Bill, Transaction, SystemConfig, PaymentDetails, User } from '../types';
+import { Bill, Transaction, SystemConfig, PaymentDetails, User, AnnualFee } from '../types';
 
 export const dbService = {
   // --- Bills ---
@@ -268,5 +268,28 @@ export const dbService = {
     } catch (err) {
       console.warn("Could not cancel reminder:", err);
     }
+  },
+
+  // --- Annual Fees ---
+  async getAnnualFees(): Promise<AnnualFee[]> {
+    const { data, error } = await supabase
+      .from('annual_fees')
+      .select('*')
+      .order('charge_year', { ascending: false })
+      .order('charge_month', { ascending: false });
+
+    if (error) throw error;
+    return (data || []).map((f: any) => ({
+      id: f.id,
+      userId: f.user_id,
+      bankName: f.bank_name,
+      cardName: f.card_name,
+      amount: f.amount,
+      chargeMonth: f.charge_month,
+      chargeYear: f.charge_year,
+      isRecurring: f.is_recurring,
+      lastSeenAt: f.last_seen_at,
+      createdAt: f.created_at,
+    }));
   },
 };

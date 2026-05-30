@@ -5,10 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev      # Start development server (tsx server.ts — runs Express backend)
+npm run dev      # Start Vite dev server (frontend with HMR)
 npm run build    # Build frontend (vite build)
 npm run preview  # Preview production build
-npm start        # Run production server
+npm start        # Run Express server (backend + cron jobs, also serves built frontend)
 ```
 
 There is no test or lint script configured.
@@ -51,6 +51,7 @@ SUPABASE_ANON_KEY        # Supabase anon key (used in backend)
 GEMINI_API_KEY           # Google Gemini API key (server-side only)
 RESEND_API_KEY           # Resend email API key (server-side only)
 EMAIL_FROM               # Sender address for email notifications
+CRON_SECRET              # Bearer token protecting /api/trigger-* endpoints
 ```
 
 ## Domain Context
@@ -62,8 +63,10 @@ The app is tailored for **Singapore credit card miles optimization**, drawing on
 
 ## Supabase Schema
 
-Core tables: `profiles`, `bills`, `transactions`, `system_config`, `email_logs`
+Core tables: `profiles`, `bills`, `transactions`, `system_config`, `email_logs`, `ai_insights`
 Storage bucket: `bill-documents` (signed URLs with 1-hour expiry)
+
+AI insights are cached per-user — Gemini is called only when bills change, not on every page load.
 
 ## Cron Jobs (server.ts)
 

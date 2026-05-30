@@ -18,6 +18,10 @@ Key Singapore Miles Strategies to know:
 5. General Spend: Citi PremierMiles, DBS Altitude (1.2 mpd).
 
 When extracting data, ensure dates are YYYY-MM-DD.
+
+IMPORTANT — Annual Fee Detection:
+For ANY transaction where the description matches /annual\s*(fee|charge|service|levy)/i (case-insensitive), you MUST mark that transaction with an additional field "isAnnualFee": true.
+These annual fee line items should still appear in the transactions array with their normal amount, but with the isAnnualFee flag set to true so they can be tracked separately.
 `;
 
 // Initialize Supabase client for the backend
@@ -372,6 +376,49 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+// Post-process extracted bills to detect and store annual fees
+async function processAnnualFees(userId: string, bills: any[]) {
+  if (!supabase) return;
+  for (const bill of bills) {
+    for (const tx of (bill.transactions || [])) {
+      if (tx.isAnnualFee) {
+        const chargeDate = new Date(tx.date);
+        const chargeMonth = chargeDate.getMonth() + 1;
+        const chargeYear = chargeDate.getFullYear();
+
+        // Check if a prior record exists for the same card
+        const { data: existing } = await supabase
+          .from('annual_fees')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('bank_name', bill.bankName)
+          .eq('card_name', bill.cardName)
+          .eq('charge_month', chargeMonth)
+          .single();
+
+        const isRecurring = !!existing;
+
+        const { error: upsertError } = await supabase
+          .from('annual_fees')
+          .upsert({
+            user_id: userId,
+            bank_name: bill.bankName,
+            card_name: bill.cardName,
+            amount: Math.abs(tx.amount),
+            charge_month: chargeMonth,
+            charge_year: chargeYear,
+            is_recurring: isRecurring,
+            last_seen_at: new Date().toISOString(),
+          }, {
+            onConflict: 'user_id,bank_name,card_name,charge_month',
+          });
+
+        if (upsertError) console.error('Failed to upsert annual fee:', upsertError);
+      }
+    }
+  }
+}
+
 // Bill statement extraction — moved server-side to avoid CORS/preflight rejection
 // from browser-originated calls and to keep the API key out of the JS bundle.
 app.post("/api/extract-bill", requireAuth, async (req, res) => {
@@ -437,6 +484,7 @@ app.post("/api/extract-bill", requireAuth, async (req, res) => {
                         description: { type: Type.STRING },
                         amount: { type: Type.NUMBER },
                         category: { type: Type.STRING },
+                        isAnnualFee: { type: Type.BOOLEAN, description: "True if transaction description matches /annual\\s*(fee|charge|service|levy)/i" },
                       },
                     },
                   },
@@ -453,6 +501,17 @@ app.post("/api/extract-bill", requireAuth, async (req, res) => {
       return res.status(502).json({ error: "Empty response from Gemini" });
     }
     const parsed = JSON.parse(response.text);
+
+    // Detect and store annual fee transactions
+    const auth = req.headers.authorization || "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+    if (token) {
+      const { data: userData } = await supabase.auth.getUser(token);
+      if (userData?.user) {
+        await processAnnualFees(userData.user.id, parsed.bills || []);
+      }
+    }
+
     res.json(parsed);
   } catch (err: any) {
     console.error("extract-bill error:", err);
@@ -646,6 +705,105 @@ app.get("/api/email-logs", async (req, res) => {
   } catch (err) {
     console.error("Error fetching email logs:", err);
     res.status(500).json({ error: "Failed to fetch email logs" });
+  }
+});
+
+// POST /api/backfill-annual-fees — scan existing transaction history to detect annual fees
+app.post("/api/backfill-annual-fees", requireAuth, async (req, res) => {
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) return res.status(401).json({ error: "Missing bearer token" });
+
+  const { data: userData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !userData?.user) return res.status(401).json({ error: "Invalid session" });
+  if (!supabase) return res.status(500).json({ error: "Database not initialized" });
+
+  try {
+    // Fetch all bills and transactions for this user
+    const { data: bills, error: billsError } = await supabase
+      .from('bills')
+      .select('*, transactions(*)')
+      .eq('user_id', userData.user.id);
+
+    if (billsError) throw billsError;
+
+    const annualFeeRegex = /annual\s*(fee|charge|service|levy)/i;
+    let detected = 0;
+    let skipped = 0;
+
+    for (const bill of (bills || [])) {
+      for (const tx of (bill.transactions || [])) {
+        if (!annualFeeRegex.test(tx.description || '')) {
+          skipped++;
+          continue;
+        }
+
+        const chargeDate = new Date(tx.date);
+        const chargeMonth = chargeDate.getMonth() + 1;
+        const chargeYear = chargeDate.getFullYear();
+
+        // Check if a prior record exists for the same card (for recurring flag)
+        const { data: existing } = await supabase
+          .from('annual_fees')
+          .select('id')
+          .eq('user_id', userData.user.id)
+          .eq('bank_name', bill.bank_name)
+          .eq('card_name', bill.card_name)
+          .eq('charge_month', chargeMonth)
+          .single();
+
+        const isRecurring = !!existing;
+
+        const { error: upsertError } = await supabase
+          .from('annual_fees')
+          .upsert({
+            user_id: userData.user.id,
+            bank_name: bill.bank_name,
+            card_name: bill.card_name,
+            amount: Math.abs(tx.amount),
+            charge_month: chargeMonth,
+            charge_year: chargeYear,
+            is_recurring: isRecurring,
+            last_seen_at: new Date().toISOString(),
+          }, {
+            onConflict: 'user_id,bank_name,card_name,charge_month',
+          });
+
+        if (!upsertError) detected++;
+      }
+    }
+
+    res.json({ success: true, detected, skipped });
+  } catch (err: any) {
+    console.error("Error backfilling annual fees:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/annual-fees — returns all annual fee records for the authenticated user
+app.get("/api/annual-fees", requireAuth, async (req, res) => {
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) return res.status(401).json({ error: "Missing bearer token" });
+
+  const { data: userData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !userData?.user) return res.status(401).json({ error: "Invalid session" });
+
+  if (!supabase) return res.status(500).json({ error: "Database not initialized" });
+
+  try {
+    const { data, error } = await supabase
+      .from('annual_fees')
+      .select('*')
+      .eq('user_id', userData.user.id)
+      .order('charge_year', { ascending: false })
+      .order('charge_month', { ascending: false });
+
+    if (error) throw error;
+    res.json({ fees: data || [] });
+  } catch (err: any) {
+    console.error("Error fetching annual fees:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
