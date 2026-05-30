@@ -228,47 +228,9 @@ export const dbService = {
     if (error) throw error;
   },
 
-  // --- Trigger-based Email Reminders ---
-
-  // Call after a bill is created to schedule a Resend email 3 days before due date
-  async scheduleReminder(bill: Bill, user: User): Promise<void> {
-    try {
-      const response = await fetch('/api/schedule-reminder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userEmail: user.email,
-          userName: user.name,
-          cardName: bill.cardName,
-          bankName: bill.bankName,
-          amount: bill.totalAmount,
-          dueDate: bill.dueDate,
-          userId: user.id,
-          billId: bill.id,
-        })
-      });
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        console.warn("Failed to schedule reminder:", err);
-      }
-    } catch (err) {
-      // Non-fatal — reminder scheduling should never block the main flow
-      console.warn("Could not schedule email reminder:", err);
-    }
-  },
-
-  // Call when a bill is marked as paid to cancel the pending Resend reminder
-  async cancelReminder(reminderEmailId: string): Promise<void> {
-    try {
-      await fetch('/api/cancel-reminder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reminderEmailId })
-      });
-    } catch (err) {
-      console.warn("Could not cancel reminder:", err);
-    }
-  },
+  // Note: Reminder scheduling is handled by the daily cron job (/api/trigger-reminders)
+  // which batches all unpaid bills into a single email per user.
+  // Individual bill upload no longer triggers separate reminder emails to avoid spam.
 
   // --- Annual Fees ---
   async getAnnualFees(): Promise<AnnualFee[]> {

@@ -132,54 +132,74 @@ async function runDailyReminders(testUserId?: string) {
       }
       const bills = billsByUser[user.id] || [];
 
-      let upcomingBills = bills.filter((b: any) => {
-        const daysLeft = getDaysRemaining(b.due_date);
-        return daysLeft <= 3;
-      });
+      // Sort all unpaid bills by due date ascending (most urgent first)
+      const sortedBills = [...bills].sort((a: any, b: any) =>
+        new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+      );
 
-      if (testUserId && upcomingBills.length === 0) {
-        upcomingBills = [{
+      // For test mode: use dummy bill if no unpaid bills exist
+      if (testUserId && sortedBills.length === 0) {
+        sortedBills.push({
           card_name: 'Test Card (Dummy)',
           bank_name: 'Test Bank',
           total_amount: 123.45,
           due_date: new Date().toISOString()
-        }];
+        });
       }
 
-      if (upcomingBills.length > 0) {
+      // Send ONE email per user with ALL their unpaid bills (batch, not per-bill)
+      if (sortedBills.length > 0) {
         const appUrl = process.env.VITE_APP_URL || process.env.APP_URL || 'https://credittrack.elitex.cc';
+        const totalAmount = sortedBills.reduce((sum: number, b: any) => sum + Number(b.total_amount || 0), 0);
+        const overdueCount = sortedBills.filter((b: any) => getDaysRemaining(b.due_date) < 0).length;
+        const urgentCount = sortedBills.filter((b: any) => {
+          const d = getDaysRemaining(b.due_date);
+          return d >= 0 && d <= 3;
+        }).length;
+
         let emailHtml = `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-            <h2 style="color: #d97706;">Action Required: Urgent Bill Payment Reminder</h2>
+            <h2 style="color: ${overdueCount > 0 ? '#dc2626' : urgentCount > 0 ? '#d97706' : '#4f46e5'};">
+              ${overdueCount > 0 ? 'Overdue Bill Payment Alert' : urgentCount > 0 ? 'Action Required: Upcoming Bill Payments' : 'Your Outstanding Credit Card Bills'}
+            </h2>
             <p>Hello ${user.name},</p>
-            <p>You have credit card bills that are due in <strong>3 days or less</strong>. To avoid late fees and protect your credit score, please arrange payment for the following bills immediately:</p>
-            <ul style="background: #fffbeb; padding: 20px 40px; border-radius: 8px; border: 1px solid #fde68a;">
+            <p>You have <strong>${sortedBills.length} unpaid bill${sortedBills.length > 1 ? 's' : ''}</strong> totaling <strong>$${totalAmount.toFixed(2)}</strong>.${overdueCount > 0 ? ` <span style="color:#dc2626;font-weight:bold;">${overdueCount} is overdue!</span>` : ''} Please review and arrange payment:</p>
+            <ul style="background: ${overdueCount > 0 ? '#fef2f2' : urgentCount > 0 ? '#fffbeb' : '#f0fdf4'}; padding: 20px 40px; border-radius: 8px; border: 1px solid ${overdueCount > 0 ? '#fecaca' : urgentCount > 0 ? '#fde68a' : '#bbf7d0'};">
         `;
 
-        upcomingBills.forEach((b: any) => {
+        sortedBills.forEach((b: any) => {
           const maskedCard = maskCardName(b.card_name);
-          const amount = `$${b.total_amount.toFixed(2)}`;
+          const amount = `$${Number(b.total_amount || 0).toFixed(2)}`;
           const d = new Date(b.due_date);
           const dueDate = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
           const daysLeft = getDaysRemaining(b.due_date);
-          const urgency = daysLeft < 0 ? `<span style="color: #dc2626; font-weight: bold;">(OVERDUE)</span>` : `<span style="color: #d97706; font-weight: bold;">(Due in ${daysLeft} days)</span>`;
-          emailHtml += `<li style="margin-bottom: 10px;"><strong>${maskedCard}</strong> (${b.bank_name})<br/>Amount: <strong>${amount}</strong><br/>Deadline: <strong>${dueDate}</strong> ${urgency}</li>`;
+          const urgency = daysLeft < 0
+            ? `<span style="color: #dc2626; font-weight: bold;">OVERDUE by ${Math.abs(daysLeft)} day${Math.abs(daysLeft) > 1 ? 's' : ''}</span>`
+            : daysLeft === 0
+            ? `<span style="color: #dc2626; font-weight: bold;">Due TODAY</span>`
+            : daysLeft <= 3
+            ? `<span style="color: #d97706; font-weight: bold;">Due in ${daysLeft} day${daysLeft > 1 ? 's' : ''}</span>`
+            : `<span style="color: #6b7280;">Due in ${daysLeft} days</span>`;
+          emailHtml += `<li style="margin-bottom: 12px;"><strong>${maskedCard}</strong> (${b.bank_name})<br/>Amount: <strong>${amount}</strong> &nbsp;|&nbsp; Deadline: <strong>${dueDate}</strong> ${urgency}</li>`;
         });
 
         emailHtml += `
             </ul>
-            <p style="font-size: 16px;"><strong>Action to take:</strong> Please log in to your respective banking portals today to clear these balances.</p>
-            <p>Once paid, mark them as paid in <a href="${appUrl}" style="color: #4f46e5; font-weight: bold;">CreditTrack</a>.</p>
+            <p style="font-size: 16px; margin-top: 16px;"><strong>Action:</strong> Log in to your banking portals to settle these payments before the deadlines to avoid late fees.</p>
+            <p>Once paid, mark them as paid in <a href="${appUrl}" style="color: #4f46e5; font-weight: bold;">CreditTrack</a> to keep your dashboard accurate.</p>
+            <p style="margin-top: 24px; font-size: 12px; color: #9ca3af;">This is an automated daily reminder from CreditTrack. To stop receiving these, please mark your bills as paid.</p>
             <p>Best regards,<br/>EliteX.CC Team</p>
           </div>
         `;
 
         await sendEmail(
           user,
-          "Action Required: Urgent Credit Card Bills",
+          overdueCount > 0 ? `URGENT: ${overdueCount} Overdue Bill${overdueCount > 1 ? 's' : ''} - Action Required`
+            : urgentCount > 0 ? `Action Required: ${urgentCount} Bill${urgentCount > 1 ? 's' : ''} Due Within 3 Days`
+            : `Your ${sortedBills.length} Outstanding Credit Card Bills`,
           emailHtml,
-          "bill_reminder",
-          { bills_count: upcomingBills.length }
+          "daily_bill_summary",
+          { bills_count: sortedBills.length, total_amount: totalAmount }
         );
       }
     }
