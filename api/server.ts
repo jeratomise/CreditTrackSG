@@ -830,10 +830,10 @@ app.patch("/api/annual-fees/:id", requireAuth, async (req, res) => {
       .eq('id', id)
       .eq('user_id', userData.user.id)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
-    if (!data) return res.status(404).json({ error: "Annual fee not found" });
+    if (!data) return res.status(404).json({ error: "Annual fee not found or access denied" });
     res.json(data);
   } catch (err: any) {
     console.error("Error updating annual fee:", err);
