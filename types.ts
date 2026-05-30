@@ -101,6 +101,8 @@ export interface EmailLog {
   details: any;
 }
 
+export type AnnualFeeStatus = 'active' | 'waived' | 'ignored';
+
 export interface AnnualFee {
   id: string;
   userId: string;
@@ -112,4 +114,5 @@ export interface AnnualFee {
   isRecurring: boolean;
   lastSeenAt: string;
   createdAt: string;
+  status: AnnualFeeStatus;
 }

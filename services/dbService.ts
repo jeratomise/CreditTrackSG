@@ -290,6 +290,7 @@ export const dbService = {
       isRecurring: f.is_recurring,
       lastSeenAt: f.last_seen_at,
       createdAt: f.created_at,
+      status: f.status || 'active',
     }));
   },
 };

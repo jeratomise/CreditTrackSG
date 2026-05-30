@@ -807,6 +807,39 @@ app.get("/api/annual-fees", requireAuth, async (req, res) => {
   }
 });
 
+// PATCH /api/annual-fees/:id — update status (waived or ignored)
+app.patch("/api/annual-fees/:id", requireAuth, async (req, res) => {
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) return res.status(401).json({ error: "Missing bearer token" });
+
+  const { data: userData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !userData?.user) return res.status(401).json({ error: "Invalid session" });
+  if (!supabase) return res.status(500).json({ error: "Database not initialized" });
+
+  const { id } = req.params;
+  const { status } = req.body;
+  if (!['waived', 'ignored', 'active'].includes(status)) {
+    return res.status(400).json({ error: "Invalid status" });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('annual_fees')
+      .update({ status })
+      .eq('id', id)
+      .eq('user_id', userData.user.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (err: any) {
+    console.error("Error updating annual fee:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Cron secret validation middleware
 function validateCronSecret(req: express.Request, res: express.Response, next: express.NextFunction) {
   const cronSecret = process.env.CRON_SECRET;
