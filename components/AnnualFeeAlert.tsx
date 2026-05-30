@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, RefreshCw, Calendar, Loader2, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Calendar, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { AnnualFee } from '../types';
 import { supabase } from '../lib/supabaseClient';
 
@@ -17,33 +17,62 @@ export const AnnualFeeAlert: React.FC<AnnualFeeAlertProps> = ({ fees, onFeesUpda
   const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState<FilterType>('all');
 
-  const filteredFees = fees.filter(f => filter === 'all' ? true : f.status === filter);
-  const activeCount = fees.filter(f => f.status === 'active').length;
+  // Local state mirrors fees so we can update optimistically
+  const [localFees, setLocalFees] = useState<AnnualFee[]>(fees);
 
-  const fetchFees = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return [];
-    const token = session.access_token;
-    const res = await fetch('/api/annual-fees', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const feesData = await res.json();
-    return feesData.fees || [];
-  };
+  // Sync local state when props change
+  React.useEffect(() => {
+    setLocalFees(fees);
+  }, [fees]);
+
+  const displayFees = fees.length > 0 ? localFees : fees;
+
+  const filteredFees = displayFees.filter(f => filter === 'all' ? true : f.status === filter);
+  const activeCount = displayFees.filter(f => f.status === 'active').length;
 
   const handleBackfill = async () => {
     setBackfilling(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
+
       const res = await fetch('/api/backfill-annual-fees', {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       const result = await res.json();
-      if (result.success && onFeesUpdated) {
-        const fees = await fetchFees();
-        onFeesUpdated(fees);
+      console.log('Backfill result:', result);
+
+      if (result.success) {
+        // Re-fetch from direct Supabase query (most reliable)
+        const { data: { session: sess } } = await supabase.auth.getSession();
+        if (!sess) return;
+        const userId = sess.user.id;
+
+        const { data: fetchedFees, error } = await supabase
+          .from('annual_fees')
+          .select('*')
+          .eq('user_id', userId)
+          .order('charge_year', { ascending: false })
+          .order('charge_month', { ascending: false });
+
+        if (!error && fetchedFees) {
+          const mapped = fetchedFees.map((f: any) => ({
+            id: f.id,
+            userId: f.user_id,
+            bankName: f.bank_name,
+            cardName: f.card_name,
+            amount: f.amount,
+            chargeMonth: f.charge_month,
+            chargeYear: f.charge_year,
+            isRecurring: f.is_recurring,
+            lastSeenAt: f.last_seen_at,
+            createdAt: f.created_at,
+            status: f.status || 'active',
+          }));
+          setLocalFees(mapped);
+          onFeesUpdated?.(mapped);
+        }
       }
     } catch (err) {
       console.error('Backfill failed:', err);
@@ -52,25 +81,31 @@ export const AnnualFeeAlert: React.FC<AnnualFeeAlertProps> = ({ fees, onFeesUpda
     }
   };
 
-  const handleStatusChange = async (feeId: string, status: 'waived' | 'ignored' | 'active') => {
+  const handleStatusChange = async (feeId: string, newStatus: 'waived' | 'ignored' | 'active') => {
+    // Optimistic update — update UI immediately
+    const updated = localFees.map(f =>
+      f.id === feeId ? { ...f, status: newStatus as AnnualFee['status'] } : f
+    );
+    setLocalFees(updated);
+    onFeesUpdated?.(updated);
+
+    // Persist to database directly via Supabase (bypasses server auth issues)
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const res = await fetch(`/api/annual-fees/${feeId}`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      const body = await res.json().catch(() => ({}));
-      console.log('PATCH response:', res.status, body);
-      if (res.ok && onFeesUpdated) {
-        const fees = await fetchFees();
-        onFeesUpdated(fees);
-      } else {
-        console.error('Status change failed:', res.status, body);
+      const { error } = await supabase
+        .from('annual_fees')
+        .update({ status: newStatus })
+        .eq('id', feeId);
+
+      if (error) {
+        console.error('Status update failed:', error);
+        // Revert on failure
+        setLocalFees(fees);
+        onFeesUpdated?.(fees);
       }
     } catch (err) {
-      console.error('Failed to update fee status:', err);
+      console.error('Status update exception:', err);
+      setLocalFees(fees);
+      onFeesUpdated?.(fees);
     }
   };
 
@@ -136,7 +171,7 @@ export const AnnualFeeAlert: React.FC<AnnualFeeAlertProps> = ({ fees, onFeesUpda
             <div className="flex items-center gap-3">
               <h3 className="font-semibold text-gray-900">Annual Fees</h3>
               <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
-                {fees.length} total
+                {displayFees.length} total
               </span>
             </div>
             <button
@@ -175,9 +210,9 @@ export const AnnualFeeAlert: React.FC<AnnualFeeAlertProps> = ({ fees, onFeesUpda
                   key={fee.id}
                   className={`flex items-center justify-between rounded-lg p-3 border transition-all ${
                     fee.status === 'waived'
-                      ? 'bg-green-50 border-green-100 opacity-60'
+                      ? 'bg-green-50 border-green-100'
                       : fee.status === 'ignored'
-                      ? 'bg-gray-50 border-gray-100 opacity-40'
+                      ? 'bg-gray-50 border-gray-100'
                       : 'bg-white border-gray-100 hover:border-amber-200'
                   }`}
                 >
