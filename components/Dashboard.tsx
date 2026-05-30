@@ -35,10 +35,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
   const [selectedBillForPayment, setSelectedBillForPayment] = useState<Bill | null>(null);
   const [billToEdit, setBillToEdit] = useState<Bill | null>(null);
   const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>('ALL');
+  const [selectedBankFilter, setSelectedBankFilter] = useState<string>('ALL');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [billToDelete, setBillToDelete] = useState<string | null>(null);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [annualFees, setAnnualFees] = useState<AnnualFee[]>([]);
+  const [showAllBills, setShowAllBills] = useState(false);
+  const MAX_VISIBLE_BILLS = 30;
 
   useEffect(() => {
     const fetchAnnualFees = async () => {
@@ -153,18 +156,50 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
         months.add(key);
       }
     });
-    return Array.from(months).sort().reverse(); // Newest first
+    return Array.from(months).sort().reverse();
   }, [bills]);
 
+  const availableBanks = useMemo(() => {
+    const banks = new Set<string>();
+    bills.forEach(bill => {
+      let bankName = bill.bankName.trim();
+      if (bankName.toLowerCase().includes('dbs')) bankName = 'DBS';
+      else if (bankName.toLowerCase().includes('uob')) bankName = 'UOB';
+      else if (bankName.toLowerCase().includes('citi')) bankName = 'Citibank';
+      else if (bankName.toLowerCase().includes('hsbc')) bankName = 'HSBC';
+      else if (bankName.toLowerCase().includes('ocbc')) bankName = 'OCBC';
+      else if (bankName.toLowerCase().includes('american express') || bankName.toLowerCase().includes('amex')) bankName = 'AMEX';
+      else if (bankName.toLowerCase().includes('standard chartered')) bankName = 'Standard Chartered';
+      banks.add(bankName);
+    });
+    return Array.from(banks).sort();
+  }, [bills]);
+
+  const displayedBills = showAllBills ? filteredBills : filteredBills.slice(0, MAX_VISIBLE_BILLS);
+
   const filteredBills = useMemo(() => {
-    const base = selectedMonthFilter === 'ALL'
-      ? bills
-      : bills.filter(b => b.dueDate.startsWith(selectedMonthFilter));
+    let base = bills;
+    if (selectedMonthFilter !== 'ALL') {
+      base = base.filter(b => b.dueDate.startsWith(selectedMonthFilter));
+    }
+    if (selectedBankFilter !== 'ALL') {
+      base = base.filter(b => {
+        let bankName = b.bankName.trim();
+        if (bankName.toLowerCase().includes('dbs')) bankName = 'DBS';
+        else if (bankName.toLowerCase().includes('uob')) bankName = 'UOB';
+        else if (bankName.toLowerCase().includes('citi')) bankName = 'Citibank';
+        else if (bankName.toLowerCase().includes('hsbc')) bankName = 'HSBC';
+        else if (bankName.toLowerCase().includes('ocbc')) bankName = 'OCBC';
+        else if (bankName.toLowerCase().includes('american express') || bankName.toLowerCase().includes('amex')) bankName = 'AMEX';
+        else if (bankName.toLowerCase().includes('standard chartered')) bankName = 'Standard Chartered';
+        return bankName === selectedBankFilter;
+      });
+    }
     const dir = sortOrder === 'desc' ? -1 : 1;
     return [...base].sort((a, b) =>
       dir * (new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
     );
-  }, [bills, selectedMonthFilter, sortOrder]);
+  }, [bills, selectedMonthFilter, selectedBankFilter, sortOrder]);
 
   const handlePaymentConfirm = (billId: string, details: PaymentDetails) => {
     const billToUpdate = bills.find(b => b.id === billId);
@@ -402,17 +437,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           {/* Table Header with Filters */}
           <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3">
                   <h3 className="text-lg font-semibold text-gray-900">Recent Bills</h3>
-                  
+
+                  {/* Bank Filter */}
+                  {availableBanks.length > 0 && (
+                    <select
+                      value={selectedBankFilter}
+                      onChange={e => setSelectedBankFilter(e.target.value)}
+                      className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    >
+                      <option value="ALL">All Banks</option>
+                      {availableBanks.map(bank => (
+                        <option key={bank} value={bank}>{bank}</option>
+                      ))}
+                    </select>
+                  )}
+
                   {/* Month Filters */}
                   {availableMonths.length > 0 && (
                     <div className="flex items-center bg-gray-100 p-1 rounded-lg overflow-x-auto">
                         <button
                             onClick={() => setSelectedMonthFilter('ALL')}
                             className={`px-3 py-1 text-xs font-medium rounded-md transition-all whitespace-nowrap ${
-                                selectedMonthFilter === 'ALL' 
-                                ? 'bg-white text-indigo-600 shadow-sm' 
+                                selectedMonthFilter === 'ALL'
+                                ? 'bg-white text-indigo-600 shadow-sm'
                                 : 'text-gray-500 hover:text-gray-700'
                             }`}
                         >
@@ -423,8 +472,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
                                 key={month}
                                 onClick={() => setSelectedMonthFilter(month)}
                                 className={`px-3 py-1 text-xs font-medium rounded-md transition-all whitespace-nowrap ${
-                                    selectedMonthFilter === month 
-                                    ? 'bg-white text-indigo-600 shadow-sm' 
+                                    selectedMonthFilter === month
+                                    ? 'bg-white text-indigo-600 shadow-sm'
                                     : 'text-gray-500 hover:text-gray-700'
                                 }`}
                             >
@@ -434,8 +483,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
                     </div>
                   )}
               </div>
-              
+
               <div className="flex items-center gap-2">
+                {filteredBills.length > MAX_VISIBLE_BILLS && !showAllBills && (
+                  <button
+                    onClick={() => setShowAllBills(true)}
+                    className="flex items-center gap-2 text-sm bg-indigo-50 text-indigo-600 px-3 py-2 rounded-lg hover:bg-indigo-100 font-medium transition-colors whitespace-nowrap"
+                  >
+                    Show All ({filteredBills.length})
+                  </button>
+                )}
+                {showAllBills && (
+                  <button
+                    onClick={() => setShowAllBills(false)}
+                    className="flex items-center gap-2 text-sm bg-gray-50 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-100 font-medium transition-colors whitespace-nowrap"
+                  >
+                    Show Less
+                  </button>
+                )}
                 <button
                   onClick={() => setSortOrder(s => (s === 'desc' ? 'asc' : 'desc'))}
                   title={sortOrder === 'desc' ? 'Newest first (click for oldest first)' : 'Oldest first (click for newest first)'}
@@ -460,10 +525,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
           
           {/* Mobile Card View */}
           <div className="md:hidden divide-y divide-gray-100">
-            {filteredBills.length === 0 ? (
+            {displayedBills.length === 0 ? (
               <p className="px-6 py-8 text-center text-gray-400 text-sm">No bills found for this period.</p>
             ) : (
-              filteredBills.map(bill => {
+              displayedBills.map(bill => {
                 const daysLeft = getDaysRemaining(bill.dueDate);
                 return (
                   <div key={`mobile-${bill.id}`} className="p-4 space-y-3">
@@ -554,12 +619,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
                       </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                      {filteredBills.length === 0 ? (
+                      {displayedBills.length === 0 ? (
                           <tr>
                               <td colSpan={6} className="px-6 py-8 text-center text-gray-400">No bills found for this period.</td>
                           </tr>
                       ) : (
-                          filteredBills.map(bill => (
+                          displayedBills.map(bill => (
                               <tr key={bill.id} className="hover:bg-gray-50 transition-colors">
                                   <td className="px-6 py-4">
                                       <div className="font-medium text-gray-900">{bill.cardName}</div>
