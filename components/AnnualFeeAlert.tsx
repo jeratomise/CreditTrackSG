@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AlertTriangle, RefreshCw, Calendar, Loader2, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { AnnualFee } from '../types';
+import { supabase } from '../lib/supabaseClient';
 
 interface AnnualFeeAlertProps {
   fees: AnnualFee[];
@@ -19,21 +20,30 @@ export const AnnualFeeAlert: React.FC<AnnualFeeAlertProps> = ({ fees, onFeesUpda
   const filteredFees = fees.filter(f => filter === 'all' ? true : f.status === filter);
   const activeCount = fees.filter(f => f.status === 'active').length;
 
+  const fetchFees = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return [];
+    const token = session.access_token;
+    const res = await fetch('/api/annual-fees', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const feesData = await res.json();
+    return feesData.fees || [];
+  };
+
   const handleBackfill = async () => {
     setBackfilling(true);
     try {
-      const token = localStorage.getItem('sb-token') || sessionStorage.getItem('sb-token');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
       const res = await fetch('/api/backfill-annual-fees', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
       const result = await res.json();
       if (result.success && onFeesUpdated) {
-        const feesRes = await fetch('/api/annual-fees', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const feesData = await feesRes.json();
-        onFeesUpdated(feesData.fees || []);
+        const fees = await fetchFees();
+        onFeesUpdated(fees);
       }
     } catch (err) {
       console.error('Backfill failed:', err);
@@ -44,18 +54,16 @@ export const AnnualFeeAlert: React.FC<AnnualFeeAlertProps> = ({ fees, onFeesUpda
 
   const handleStatusChange = async (feeId: string, status: 'waived' | 'ignored' | 'active') => {
     try {
-      const token = localStorage.getItem('sb-token') || sessionStorage.getItem('sb-token');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
       const res = await fetch(`/api/annual-fees/${feeId}`, {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       });
       if (res.ok && onFeesUpdated) {
-        const feesRes = await fetch('/api/annual-fees', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const feesData = await feesRes.json();
-        onFeesUpdated(feesData.fees || []);
+        const fees = await fetchFees();
+        onFeesUpdated(fees);
       }
     } catch (err) {
       console.error('Failed to update fee status:', err);

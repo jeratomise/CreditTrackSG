@@ -8,6 +8,7 @@ import { EditBillModal } from './EditBillModal';
 import { AlertModal } from './AlertModal';
 import { AnnualFeeAlert } from './AnnualFeeAlert';
 import { dbService } from '../services/dbService';
+import { supabase } from '../lib/supabaseClient';
 
 interface DashboardProps {
   bills: Bill[];
@@ -40,7 +41,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
   const [annualFees, setAnnualFees] = useState<AnnualFee[]>([]);
 
   useEffect(() => {
-    dbService.getAnnualFees().then(setAnnualFees).catch(console.error);
+    const fetchAnnualFees = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const { data } = await supabase
+        .from('annual_fees')
+        .select('*')
+        .order('charge_year', { ascending: false })
+        .order('charge_month', { ascending: false });
+      if (data) {
+        setAnnualFees(data.map((f: any) => ({
+          id: f.id,
+          userId: f.user_id,
+          bankName: f.bank_name,
+          cardName: f.card_name,
+          amount: f.amount,
+          chargeMonth: f.charge_month,
+          chargeYear: f.charge_year,
+          isRecurring: f.is_recurring,
+          lastSeenAt: f.last_seen_at,
+          createdAt: f.created_at,
+          status: f.status || 'active',
+        })));
+      }
+    };
+    fetchAnnualFees();
   }, []);
 
   const totalDue = useMemo(() => 
