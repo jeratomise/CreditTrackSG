@@ -175,9 +175,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
     return Array.from(banks).sort();
   }, [bills]);
 
-  const displayedBills = showAllBills ? filteredBills : filteredBills.slice(0, MAX_VISIBLE_BILLS);
-
-  const filteredBills = useMemo(() => {
+  const displayedBills = useMemo(() => {
     let base = bills;
     if (selectedMonthFilter !== 'ALL') {
       base = base.filter(b => b.dueDate.startsWith(selectedMonthFilter));
@@ -196,10 +194,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
       });
     }
     const dir = sortOrder === 'desc' ? -1 : 1;
-    return [...base].sort((a, b) =>
+    const sorted = [...base].sort((a, b) =>
       dir * (new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
     );
-  }, [bills, selectedMonthFilter, selectedBankFilter, sortOrder]);
+    return showAllBills ? sorted : sorted.slice(0, MAX_VISIBLE_BILLS);
+  }, [bills, selectedMonthFilter, selectedBankFilter, sortOrder, showAllBills]);
 
   const handlePaymentConfirm = (billId: string, details: PaymentDetails) => {
     const billToUpdate = bills.find(b => b.id === billId);
@@ -485,12 +484,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
               </div>
 
               <div className="flex items-center gap-2">
-                {filteredBills.length > MAX_VISIBLE_BILLS && !showAllBills && (
+                {bills.length > MAX_VISIBLE_BILLS && !showAllBills && (
                   <button
                     onClick={() => setShowAllBills(true)}
                     className="flex items-center gap-2 text-sm bg-indigo-50 text-indigo-600 px-3 py-2 rounded-lg hover:bg-indigo-100 font-medium transition-colors whitespace-nowrap"
                   >
-                    Show All ({filteredBills.length})
+                    Show All ({bills.length})
                   </button>
                 )}
                 {showAllBills && (
