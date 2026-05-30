@@ -833,6 +833,7 @@ app.patch("/api/annual-fees/:id", requireAuth, async (req, res) => {
       .single();
 
     if (error) throw error;
+    if (!data) return res.status(404).json({ error: "Annual fee not found" });
     res.json(data);
   } catch (err: any) {
     console.error("Error updating annual fee:", err);

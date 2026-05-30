@@ -61,9 +61,13 @@ export const AnnualFeeAlert: React.FC<AnnualFeeAlertProps> = ({ fees, onFeesUpda
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       });
+      const body = await res.json().catch(() => ({}));
+      console.log('PATCH response:', res.status, body);
       if (res.ok && onFeesUpdated) {
         const fees = await fetchFees();
         onFeesUpdated(fees);
+      } else {
+        console.error('Status change failed:', res.status, body);
       }
     } catch (err) {
       console.error('Failed to update fee status:', err);
