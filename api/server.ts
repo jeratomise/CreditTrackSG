@@ -61,24 +61,27 @@ function getDaysRemaining(dueDateStr: string) {
 
 // Helper to send email and log to database
 async function sendEmail(user: any, subject: string, htmlContent: string, emailType: string, details: any) {
+  console.log(`[sendEmail] Attempting to send ${emailType} to ${user.email}`);
   const { data, error } = await resend.emails.send({
     from: defaultFromEmail,
     to: user.email,
     subject,
     html: htmlContent,
   });
+  console.log(`[sendEmail] Resend response — data:`, JSON.stringify(data), `error:`, JSON.stringify(error));
 
   if (error) {
+    console.error(`[sendEmail] Resend error:`, error);
     throw new Error(error.message);
   }
 
-  console.log(`${emailType} sent to ${user.email} via Resend`);
+  console.log(`${emailType} sent to ${user.email} via Resend, emailId: ${data?.id}`);
 
   const { error: logError } = await supabase.from('email_logs').insert({
     user_id: user.id,
     email: user.email,
     type: emailType,
-    details: { ...details }
+    details: { ...details, resend_id: data?.id }
   });
 
   if (logError) console.error("Failed to log email to database:", logError);
@@ -131,6 +134,7 @@ async function runDailyReminders(testUserId?: string) {
         user.email = 'jeratomise@gmail.com';
       }
       const bills = billsByUser[user.id] || [];
+      console.log(`[runDailyReminders] User ${user.email} has ${bills.length} unpaid bills`);
 
       // Sort all unpaid bills by due date ascending (most urgent first)
       const sortedBills = [...bills].sort((a: any, b: any) =>
@@ -254,6 +258,7 @@ async function runWeeklyUpdate(testUserId?: string) {
         user.email = 'jeratomise@gmail.com';
       }
       const bills = billsByUser[user.id] || [];
+      console.log(`[runDailyReminders] User ${user.email} has ${bills.length} unpaid bills`);
 
       const unpaidBills = bills.filter((b: any) => !b.is_paid);
       const paidBills = bills.filter((b: any) => b.is_paid);
