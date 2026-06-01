@@ -235,10 +235,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
   };
 
   const getUrgencyColor = (days: number) => {
-      if (days < 0) return 'text-red-600 bg-red-100'; // Overdue
-      if (days <= 3) return 'text-orange-600 bg-orange-100'; // Critical
-      if (days <= 7) return 'text-yellow-600 bg-yellow-100'; // Warning
-      return 'text-green-600 bg-green-100'; // Safe
+      if (days < 0) return 'text-white bg-red-600'; // Overdue
+      if (days <= 3) return 'text-white bg-red-500'; // Critical
+      if (days <= 7) return 'text-white bg-amber-500'; // Warning
+      if (days <= 14) return 'text-white bg-yellow-600'; // Caution
+      return 'text-gray-700 bg-gray-200'; // Safe
   };
 
   const getUrgencyLabel = (days: number) => {
@@ -552,10 +553,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
                         <span>Due {formatDateForDisplay(bill.dueDate)}</span>
                       </div>
                       {!bill.isPaid && (
-                        <span className={`font-semibold ${
-                          getDaysRemaining(bill.dueDate) < 0 ? 'text-red-600'
-                          : getDaysRemaining(bill.dueDate) <= 3 ? 'text-amber-600'
-                          : 'text-gray-700'
+                        <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${
+                          getDaysRemaining(bill.dueDate) < 0 ? 'text-white bg-red-600'
+                          : getDaysRemaining(bill.dueDate) <= 3 ? 'text-white bg-red-500'
+                          : getDaysRemaining(bill.dueDate) <= 7 ? 'text-white bg-amber-500'
+                          : 'text-gray-700 bg-gray-200'
                         }`}>
                           {getUrgencyLabel(daysLeft)}
                         </span>
@@ -637,10 +639,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
                                     <div className="flex flex-col">
                                         <span>{formatDateForDisplay(bill.dueDate)}</span>
                                         {!bill.isPaid && (
-                                            <span className={`text-[10px] font-bold uppercase ${
-                                                getDaysRemaining(bill.dueDate) < 0 ? 'text-red-600'
-                                                : getDaysRemaining(bill.dueDate) <= 3 ? 'text-amber-600'
-                                                : 'text-gray-600'
+                                            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                                                getDaysRemaining(bill.dueDate) < 0 ? 'text-white bg-red-600'
+                                                : getDaysRemaining(bill.dueDate) <= 3 ? 'text-white bg-red-500'
+                                                : getDaysRemaining(bill.dueDate) <= 7 ? 'text-white bg-amber-500'
+                                                : 'text-gray-700 bg-gray-200'
                                             }`}>
                                                 {getDaysRemaining(bill.dueDate)} days left
                                             </span>

@@ -124,7 +124,7 @@ export const AnnualFeeAlert: React.FC<AnnualFeeAlertProps> = ({ fees, onFeesUpda
             <button
               onClick={handleBackfill}
               disabled={backfilling}
-              className="mt-3 flex items-center gap-2 text-xs bg-amber-100 hover:bg-amber-200 text-amber-700 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+              className="mt-3 flex items-center gap-2 text-xs bg-amber-100 hover:bg-amber-200 text-amber-800 px-3 py-1.5 rounded-lg font-semibold transition-colors disabled:opacity-70"
             >
               {backfilling ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
               {backfilling ? 'Scanning...' : 'Scan existing data'}
@@ -177,7 +177,7 @@ export const AnnualFeeAlert: React.FC<AnnualFeeAlertProps> = ({ fees, onFeesUpda
             <button
               onClick={handleBackfill}
               disabled={backfilling}
-              className="flex items-center gap-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg font-medium transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-semibold transition-colors disabled:opacity-70"
             >
               {backfilling ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
               {backfilling ? 'Scanning...' : 'Rescan'}
