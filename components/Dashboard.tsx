@@ -32,7 +32,15 @@ const DEFAULT_BANK_COLORS = ['#6366f1', '#14b8a6', '#f59e0b', '#ec4899', '#8b5cf
 export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAddBill, onDeleteBill, onOpenManualModal }) => {
   const [selectedBillForPayment, setSelectedBillForPayment] = useState<Bill | null>(null);
   const [billToEdit, setBillToEdit] = useState<Bill | null>(null);
-  const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>('ALL');
+  // Default to the latest month with bills (lazy init to avoid flicker on first render)
+const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
+  if (typeof window === 'undefined') return 'ALL';
+  try {
+    const cached = localStorage.getItem('credittrack_month_filter');
+    if (cached) return cached;
+  } catch {}
+  return 'ALL';
+});
   const [billToDelete, setBillToDelete] = useState<string | null>(null);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
 
@@ -123,6 +131,36 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
     });
     return Array.from(months).sort().reverse(); // Newest first
   }, [bills]);
+
+  // Default filter to the latest month with bills on first load (when user hasn't picked one yet)
+  useEffect(() => {
+    if (availableMonths.length === 0) return;
+    try {
+      const saved = localStorage.getItem('credittrack_month_filter');
+      // If saved filter is no longer valid (e.g. month no longer has bills), reset to latest
+      if (saved && saved !== 'ALL' && !availableMonths.includes(saved)) {
+        setSelectedMonthFilter(availableMonths[0]);
+        localStorage.setItem('credittrack_month_filter', availableMonths[0]);
+        return;
+      }
+      if (saved && saved !== 'ALL') {
+        setSelectedMonthFilter(saved);
+        return;
+      }
+      // No saved preference → default to latest month
+      if (!saved || saved === 'ALL') {
+        setSelectedMonthFilter(availableMonths[0]);
+        localStorage.setItem('credittrack_month_filter', availableMonths[0]);
+      }
+    } catch {}
+  }, [availableMonths]);
+
+  // Persist filter changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('credittrack_month_filter', selectedMonthFilter);
+    } catch {}
+  }, [selectedMonthFilter]);
 
   const filteredBills = useMemo(() => {
     let result = selectedMonthFilter === 'ALL' ? bills : bills.filter(b => b.dueDate.startsWith(selectedMonthFilter));
