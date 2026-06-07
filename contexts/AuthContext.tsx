@@ -8,7 +8,7 @@ interface AuthContextType {
   user: User | null;
   systemConfig: SystemConfig;
   login: (email: string, password: string) => Promise<void>;
-  signup: (name: string, email: string, password: string) => Promise<void>;
+  signup: (name: string, email: string, password: string, referralCode?: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   logout: () => void;
   loading: boolean;
@@ -135,7 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (error) throw error;
   };
 
-  const signup = async (name: string, email: string, password: string) => {
+  const signup = async (name: string, email: string, password: string, referralCode?: string) => {
     if (!systemConfig.allowSignups && email !== 'jeratomise@gmail.com') {
         throw new Error("Registrations are currently disabled.");
     }
@@ -153,6 +153,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             name: name,
             role: email === 'jeratomise@gmail.com' ? 'admin' : 'user'
         });
+
+        // Track referral if code was provided
+        if (referralCode) {
+            try {
+                const session = await supabase.auth.getSession();
+                const token = session.data.session?.access_token;
+                if (token) {
+                    await fetch('/api/referrals/track', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({ referralCode }),
+                    });
+                }
+            } catch (trackErr) {
+                console.error("Failed to track referral:", trackErr);
+            }
+        }
     } else if (data.user && !data.session) {
         // Email confirmation is enabled — surface a clear message to the caller
         throw new Error('CHECK_EMAIL');

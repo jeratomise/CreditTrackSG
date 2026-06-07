@@ -100,3 +100,26 @@ export interface EmailLog {
   sent_at: string;
   details: any;
 }
+
+// Referral types
+export type ReferralStatus = 'pending' | 'converted' | 'rewarded';
+
+export interface Referral {
+  id: string;
+  referrerId: string;
+  refereeId: string;
+  referralCodeUsed: string;
+  status: ReferralStatus;
+  createdAt: string;
+  convertedAt?: string;
+}
+
+export interface ReferralStats {
+  total: number;
+  pending: number;
+  converted: number;
+  rewarded: number;
+  referralCode: string;
+  referralUrl: string;
+  proMonthsEarned: number;
+}
