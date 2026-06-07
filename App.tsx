@@ -9,9 +9,11 @@ import { AdminPanel } from './components/AdminPanel';
 import { ManualBillModal } from './components/ManualBillModal';
 import { Bill } from './types';
 import { EmailLogs } from './components/EmailLogs';
+import { ReferralPage } from './components/ReferralPage';
+import { FloatingShareBar } from './components/FloatingShareBar';
 import {
   LayoutDashboard, PieChart, Settings as SettingsIcon, Shield, LogOut,
-  LockKeyhole, Mail, Plus, X, Upload, ChevronRight, User, Sparkles
+  LockKeyhole, Mail, Plus, X, Upload, ChevronRight, User, Sparkles, Share2
 } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
 import { dbService } from './services/dbService';
@@ -87,7 +89,7 @@ const StatusIndicator: React.FC = () => {
   );
 };
 
-type ViewType = 'dashboard' | 'upload' | 'settings' | 'admin' | 'logs';
+type ViewType = 'dashboard' | 'upload' | 'settings' | 'admin' | 'logs' | 'referral';
 
 const App: React.FC = () => {
   const { user, logout, loading: authLoading } = useAuth();
@@ -183,11 +185,15 @@ const App: React.FC = () => {
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { id: 'upload', icon: PieChart, label: 'Upload' },
     { id: 'logs', icon: Mail, label: 'Logs' },
+    { id: 'referral', icon: Share2, label: 'Referral' },
     { id: 'settings', icon: SettingsIcon, label: 'Settings' },
   ];
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
+      {/* Floating Share Bar */}
+      <FloatingShareBar />
+
       {/* Mobile Header */}
       <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex justify-between items-center sticky top-0 z-20">
         <div className="flex items-center gap-2 text-indigo-600 font-bold text-xl">
@@ -247,6 +253,14 @@ const App: React.FC = () => {
                       <ChevronRight className="w-3 h-3 ml-auto text-gray-400" />
                     </button>
                   )}
+                  <button
+                    onClick={() => { setView('referral'); setIsAvatarMenuOpen(false); }}
+                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
+                  >
+                    <Share2 className="w-4 h-4 text-amber-500" />
+                    Referral Program
+                    <ChevronRight className="w-3 h-3 ml-auto text-gray-400" />
+                  </button>
                   <button
                     onClick={() => { logout(); setIsAvatarMenuOpen(false); }}
                     className="w-full flex items-center gap-3 px-3 py-2 text-sm text-red-500 hover:bg-red-50 rounded-lg transition-colors mt-1"
@@ -321,6 +335,14 @@ const App: React.FC = () => {
             >
               <Mail className="w-5 h-5" />
               Email Logs
+            </button>
+
+            <button
+              onClick={() => setView('referral')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${view === 'referral' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-50'}`}
+            >
+              <Share2 className="w-5 h-5" />
+              Referral
             </button>
 
             {user.role === 'admin' && (
@@ -434,6 +456,7 @@ const App: React.FC = () => {
           {view === 'logs' && <EmailLogs />}
           {view === 'settings' && <Settings />}
           {view === 'admin' && user.role === 'admin' && <AdminPanel />}
+          {view === 'referral' && <ReferralPage onBack={() => setView('dashboard')} />}
         </main>
       </div>
 
