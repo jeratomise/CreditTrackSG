@@ -278,6 +278,18 @@ async function runWeeklyUpdate(testUserId?: string) {
   }
 }
 
+
+// Verifies the caller is a logged-in Supabase user.
+async function requireAuth(req, res, next) {
+  if (!supabase) return res.status(500).json({ error: "Auth not initialized" });
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) return res.status(401).json({ error: "Missing bearer token" });
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data?.user) return res.status(401).json({ error: "Invalid session" });
+  next();
+}
+
 const app = express();
 
 // ── Stripe webhook MUST use raw body — register before express.json() ──
