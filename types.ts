@@ -116,3 +116,38 @@ export interface AnnualFee {
   createdAt: string;
   status: AnnualFeeStatus;
 }
+
+// Referral types
+export type ReferralStatus = 'pending' | 'converted' | 'rewarded';
+
+export interface Referral {
+  id: string;
+  referrerId: string;
+  refereeId: string;
+  referralCodeUsed: string;
+  status: ReferralStatus;
+  createdAt: string;
+  convertedAt?: string;
+}
+
+export interface ReferralStats {
+  total: number;
+  pending: number;
+  converted: number;
+  rewarded: number;
+  referralCode: string;
+  referralUrl: string;
+  proMonthsEarned: number;
+}
+
+// Extend User to include referral fields
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  joinedAt: string;
+  role: 'admin' | 'user' | 'pro';
+  status: 'active' | 'suspended';
+  referralCode?: string;
+  proMonthsEarned?: number;
+}

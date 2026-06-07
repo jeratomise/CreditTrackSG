@@ -197,6 +197,17 @@ export const LandingPage: React.FC = () => {
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
   const [showProPage, setShowProPage] = useState(false);
 
+  // Detect referral code from URL on mount
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const refCode = params.get('ref');
+    if (refCode) {
+      localStorage.setItem('credittrack_referral_code', refCode);
+      // Clean URL without reloading
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
   const switchMode = (next: AuthMode) => {
     setMode(next);
     setError('');
@@ -214,11 +225,17 @@ export const LandingPage: React.FC = () => {
     setError('');
     setSuccess('');
     setIsLoading(true);
+
+    // Retrieve referral code from localStorage
+    const referralCode = localStorage.getItem('credittrack_referral_code') || undefined;
+
     try {
       if (mode === 'login') {
         await login(formData.email, formData.password);
       } else if (mode === 'signup') {
-        await signup(formData.name, formData.email, formData.password);
+        await signup(formData.name, formData.email, formData.password, referralCode);
+        // Clear referral code after signup attempt
+        localStorage.removeItem('credittrack_referral_code');
       } else if (mode === 'forgot') {
         await resetPassword(formData.email);
         setSuccess('Recovery link sent — check your inbox.');

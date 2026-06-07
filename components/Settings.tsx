@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { UserSettings } from '../types';
+import { UserSettings, ReferralStats } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { Save, Bell, Mail, Clock, Lock, CheckCircle, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
+import { Save, Bell, Mail, Clock, Lock, CheckCircle, AlertCircle, Loader2, ShieldCheck, Copy, Users, Gift } from 'lucide-react';
 import { AlertModal } from './AlertModal';
 
 export const Settings: React.FC = () => {
@@ -18,6 +19,9 @@ export const Settings: React.FC = () => {
   const [passMsg, setPassMsg] = useState<{type: 'success' | 'error', text: string} | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
+  const [referralStats, setReferralStats] = useState<ReferralStats | null>(null);
+  const [refLoading, setRefLoading] = useState(false);
+  const [refCopied, setRefCopied] = useState(false);
 
   useEffect(() => {
     const savedSettings = localStorage.getItem('credittrack_settings');
@@ -27,6 +31,31 @@ export const Settings: React.FC = () => {
     if (user?.email && (!savedSettings)) {
         setSettings(prev => ({ ...prev, email: user.email }));
     }
+  }, [user]);
+
+  // Fetch referral stats on mount
+  useEffect(() => {
+    if (!user) return;
+    const fetchRefStats = async () => {
+      setRefLoading(true);
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        if (!token) return;
+        const res = await fetch('/api/referrals/stats', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const stats = await res.json();
+          setReferralStats(stats);
+        }
+      } catch (err) {
+        console.error("Failed to fetch referral stats:", err);
+      } finally {
+        setRefLoading(false);
+      }
+    };
+    fetchRefStats();
   }, [user]);
 
   const handleSave = (e: React.FormEvent) => {
@@ -276,11 +305,100 @@ export const Settings: React.FC = () => {
           </div>
       </div>
 
+      {/* Referral Program Section */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-8 space-y-8">
+            <div className="flex items-center gap-3 text-gray-900 font-bold border-b border-gray-50 pb-4">
+                <div className="bg-amber-50 p-2 rounded-lg">
+                    <Gift className="w-5 h-5 text-amber-600" />
+                </div>
+                <h3>Referral Program</h3>
+            </div>
+
+            {refLoading ? (
+                <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                </div>
+            ) : referralStats ? (
+                <div className="space-y-6">
+                    {/* Referral Code */}
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Your Referral Code</label>
+                        <div className="flex items-center gap-3">
+                            <div className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl font-mono text-lg font-bold text-gray-900 tracking-widest">
+                                {referralStats.referralCode || '—'}
+                            </div>
+                            <button
+                                onClick={() => {
+                                    navigator.clipboard.writeText(referralStats.referralCode || '');
+                                    setRefCopied(true);
+                                    setTimeout(() => setRefCopied(false), 2000);
+                                }}
+                                className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors"
+                                title="Copy code"
+                            >
+                                {refCopied ? <CheckCircle className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Referral URL */}
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Shareable Link</label>
+                        <div className="flex items-center gap-3">
+                            <div className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-600 truncate">
+                                {referralStats.referralUrl || '—'}
+                            </div>
+                            <button
+                                onClick={() => {
+                                    navigator.clipboard.writeText(referralStats.referralUrl || '');
+                                    setRefCopied(true);
+                                    setTimeout(() => setRefCopied(false), 2000);
+                                }}
+                                className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors"
+                                title="Copy link"
+                            >
+                                {refCopied ? <CheckCircle className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {[
+                            { label: 'Total Referrals', value: referralStats.total, icon: <Users className="w-4 h-4" /> },
+                            { label: 'Converted', value: referralStats.converted, icon: <CheckCircle className="w-4 h-4" /> },
+                            { label: 'Rewards Earned', value: referralStats.rewarded, icon: <Gift className="w-4 h-4" /> },
+                            { label: 'Pro Months', value: referralStats.proMonthsEarned, icon: <ShieldCheck className="w-4 h-4" /> },
+                        ].map((stat) => (
+                            <div key={stat.label} className="bg-gray-50 rounded-xl p-4 text-center">
+                                <div className="flex items-center justify-center gap-1.5 text-indigo-600 mb-1">
+                                    {stat.icon}
+                                    <span className="text-2xl font-black text-gray-900">{stat.value}</span>
+                                </div>
+                                <p className="text-xs text-gray-500 font-medium">{stat.label}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Reward Explanation */}
+                    <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+                        <p className="text-sm text-amber-800 font-medium">
+                            <span className="font-bold">How it works:</span> When someone signs up with your code and upgrades to Pro, you earn <strong>+1 month of Pro</strong> (stackable). Share your code to earn free Pro months for every paying referee.
+                        </p>
+                    </div>
+                </div>
+            ) : (
+                <p className="text-sm text-gray-500">Loading referral stats...</p>
+            )}
+        </div>
+      </div>
+
       {/* Alert Modal */}
-      <AlertModal 
-        message={alertMessage} 
-        onClose={() => setAlertMessage(null)} 
-        type="success" 
+      <AlertModal
+        message={alertMessage}
+        onClose={() => setAlertMessage(null)}
+        type="success"
       />
     </div>
   );

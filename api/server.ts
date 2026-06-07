@@ -909,4 +909,207 @@ app.all("/api/trigger-weekly", validateCronSecret, async (req, res) => {
   }
 });
 
+// ─── Referral System ─────────────────────────────────────────────────────────
+
+// GET /api/referrals/stats — fetch user's referral stats
+app.get("/api/referrals/stats", requireAuth, async (req, res) => {
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) return res.status(401).json({ error: "Missing bearer token" });
+
+  const { data: userData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !userData?.user) return res.status(401).json({ error: "Invalid session" });
+  if (!supabase) return res.status(500).json({ error: "Database not initialized" });
+
+  try {
+    const userId = userData.user.id;
+
+    // Fetch referral counts by status
+    const { data: referrals, error: refErr } = await supabase
+      .from('referrals')
+      .select('status')
+      .eq('referrer_id', userId);
+
+    if (refErr) throw refErr;
+
+    const stats = {
+      total: referrals?.length || 0,
+      pending: referrals?.filter((r: any) => r.status === 'pending').length || 0,
+      converted: referrals?.filter((r: any) => r.status === 'converted' || r.status === 'rewarded').length || 0,
+      rewarded: referrals?.filter((r: any) => r.status === 'rewarded').length || 0,
+    };
+
+    // Fetch user's profile for their referral code and pro_months_earned
+    const { data: profile, error: profileErr } = await supabase
+      .from('profiles')
+      .select('referral_code, pro_months_earned')
+      .eq('id', userId)
+      .single();
+
+    if (profileErr) throw profileErr;
+
+    const referralCode = profile?.referral_code || '';
+    const appUrl = process.env.VITE_APP_URL || process.env.APP_URL || 'https://credittrack.elitex.cc';
+    const referralUrl = `${appUrl}?ref=${referralCode}`;
+
+    res.json({
+      ...stats,
+      referralCode,
+      referralUrl,
+      proMonthsEarned: profile?.pro_months_earned || 0,
+    });
+  } catch (err: any) {
+    console.error("Error fetching referral stats:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/referrals/code — get or generate user's referral code
+app.get("/api/referrals/code", requireAuth, async (req, res) => {
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) return res.status(401).json({ error: "Missing bearer token" });
+
+  const { data: userData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !userData?.user) return res.status(401).json({ error: "Invalid session" });
+  if (!supabase) return res.status(500).json({ error: "Database not initialized" });
+
+  try {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('referral_code')
+      .eq('id', userData.user.id)
+      .single();
+
+    if (error) throw error;
+
+    res.json({ referralCode: profile?.referral_code || '' });
+  } catch (err: any) {
+    console.error("Error fetching referral code:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/referrals/track — record a referral when referee signs up
+app.post("/api/referrals/track", requireAuth, async (req, res) => {
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) return res.status(401).json({ error: "Missing bearer token" });
+
+  const { data: userData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !userData?.user) return res.status(401).json({ error: "Invalid session" });
+  if (!supabase) return res.status(500).json({ error: "Database not initialized" });
+
+  const { referralCode } = req.body || {};
+  if (!referralCode || typeof referralCode !== 'string') {
+    return res.status(400).json({ error: "referralCode is required" });
+  }
+
+  try {
+    // Find referrer by their referral code
+    const { data: referrerProfile, error: refErr } = await supabase
+      .from('profiles')
+      .select('id, referral_code')
+      .eq('referral_code', referralCode.toUpperCase())
+      .single();
+
+    if (refErr || !referrerProfile) {
+      return res.status(404).json({ error: "Invalid referral code" });
+    }
+
+    // Don't allow self-referral
+    if (referrerProfile.id === userData.user.id) {
+      return res.status(400).json({ error: "Cannot refer yourself" });
+    }
+
+    // Insert referral record
+    const { data: referral, error: insertErr } = await supabase
+      .from('referrals')
+      .insert({
+        referrer_id: referrerProfile.id,
+        referee_id: userData.user.id,
+        referral_code_used: referralCode.toUpperCase(),
+        status: 'pending',
+      })
+      .select()
+      .single();
+
+    if (insertErr) {
+      // Unique constraint violation means referral already exists
+      if (insertErr.code === '23505') {
+        return res.json({ success: true, message: "Referral already recorded" });
+      }
+      throw insertErr;
+    }
+
+    res.json({ success: true, referral });
+  } catch (err: any) {
+    console.error("Error tracking referral:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/referrals/check-reward — check if referee upgraded to Pro and apply reward
+app.post("/api/referrals/check-reward", requireAuth, async (req, res) => {
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) return res.status(401).json({ error: "Missing bearer token" });
+
+  const { data: userData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !userData?.user) return res.status(401).json({ error: "Invalid session" });
+  if (!supabase) return res.status(500).json({ error: "Database not initialized" });
+
+  try {
+    const refereeId = userData.user.id;
+
+    // Find pending referral for this referee
+    const { data: referral, error: refErr } = await supabase
+      .from('referrals')
+      .select('*')
+      .eq('referee_id', refereeId)
+      .eq('status', 'pending')
+      .single();
+
+    if (refErr || !referral) {
+      return res.json({ success: true, message: "No pending referral found" });
+    }
+
+    // Update referral status to rewarded
+    const { error: updateErr } = await supabase
+      .from('referrals')
+      .update({
+        status: 'rewarded',
+        converted_at: new Date().toISOString(),
+      })
+      .eq('id', referral.id);
+
+    if (updateErr) throw updateErr;
+
+    // Increment referrer's pro_months_earned by 1
+    const { data: referrerProfile, error: fetchErr } = await supabase
+      .from('profiles')
+      .select('pro_months_earned')
+      .eq('id', referral.referrer_id)
+      .single();
+
+    if (fetchErr) throw fetchErr;
+
+    const { error: profileErr } = await supabase
+      .from('profiles')
+      .update({
+        pro_months_earned: (referrerProfile?.pro_months_earned || 0) + 1,
+      })
+      .eq('id', referral.referrer_id);
+
+    if (profileErr) {
+      console.error("Error updating pro_months_earned:", profileErr);
+    }
+
+    res.json({ success: true, message: "Referral rewarded" });
+  } catch (err: any) {
+    console.error("Error checking referral reward:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default app;
