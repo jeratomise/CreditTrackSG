@@ -617,6 +617,43 @@ app.all("/api/trigger-weekly", validateCronSecret, async (req, res) => {
   }
 });
 
+
+// POST /api/referrals/backfill — generate referral codes for profiles that don't have one yet
+app.post("/api/referrals/backfill", requireAuth, async (req, res) => {
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) return res.status(401).json({ error: "Missing bearer token" });
+  const { data: userData } = await supabase.auth.getUser(token);
+  if (!userData?.user) return res.status(401).json({ error: "Invalid session" });
+
+  // Only admins can trigger backfill
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', userData.user.id).single();
+  if (profile?.role !== 'admin') return res.status(403).json({ error: "Admin only" });
+
+  try {
+    // Find all profiles missing a referral code
+    const { data: missing } = await supabase.from('profiles').select('id').is('referral_code', null);
+    if (!missing || missing.length === 0) {
+      return res.json({ success: true, message: "All profiles already have codes", count: 0 });
+    }
+
+    // Generate and assign codes
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    for (const row of missing) {
+      let code = '';
+      for (let i = 0; i < 8; i++) {
+        code += chars[Math.floor(Math.random() * chars.length)];
+      }
+      await supabase.from('profiles').update({ referral_code: code }).eq('id', row.id);
+    }
+
+    res.json({ success: true, count: missing.length });
+  } catch (err: any) {
+    console.error("Backfill error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default app;
 
 // ─── Referral System ─────────────────────────────────────────────────────────
