@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Bill, PaymentDetails } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer, Tooltip } from 'recharts';
-import { AlertTriangle, CheckCircle, Clock, Plus, Filter, TrendingUp, Pencil, FileText, ExternalLink, Calendar, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, Plus, Filter, TrendingUp, Pencil, FileText, ExternalLink, Calendar, Trash2 , Globe } from 'lucide-react';
 import { PaymentModal } from './PaymentModal';
 import { EditBillModal } from './EditBillModal';
 import { AlertModal } from './AlertModal';
@@ -653,11 +653,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
       )}
 
       {/* Alert Modal */}
-      <AlertModal 
-        message={alertMessage} 
-        onClose={() => setAlertMessage(null)} 
-        type="warning" 
+      <AlertModal
+        message={alertMessage}
+        onClose={() => setAlertMessage(null)}
+        type="warning"
       />
+
+      {/* Footer */}
+      <footer className="mt-12 pt-8 border-t border-gray-100 text-center">
+        <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+          <Globe className="w-4 h-4 text-indigo-500" />
+          <p>
+            <span className="font-semibold text-gray-700">Optimised for Singapore Banks</span>
+            <span className="mx-2 text-gray-300">•</span>
+            <span>More Countries to be Added</span>
+          </p>
+        </div>
+        <p className="text-xs text-gray-400 mt-2">© 2026 CreditTrack · EliteX.CC Group</p>
+      </footer>
     </div>
   );
 };

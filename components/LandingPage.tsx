@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   Shield, ArrowRight, Loader2, Zap, BarChart2, Bell,
   CreditCard, ChevronLeft, Users, CheckCircle, Upload,
-  Sparkles, TrendingUp, Smartphone, X
+  Sparkles, TrendingUp, Smartphone, X, Globe
 } from 'lucide-react';
 
 type AuthMode = 'login' | 'signup' | 'forgot';
@@ -718,6 +718,12 @@ export const LandingPage: React.FC = () => {
           {/* Footer */}
           <div className="mt-12 pt-8 border-t border-white/5 flex flex-col gap-4 text-[11px] font-medium text-slate-600 uppercase tracking-widest">
             <p>© CreditTrack · EliteX.CC Group</p>
+            <p className="text-slate-500 normal-case tracking-normal text-xs flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="font-semibold text-slate-400">Optimised for Singapore Banks</span>
+              <span className="text-slate-700 mx-1">•</span>
+              <span>More Countries to be Added</span>
+            </p>
             <div className="flex gap-6">
               <span className="hover:text-indigo-400 cursor-pointer transition-colors">Privacy</span>
               <span className="hover:text-indigo-400 cursor-pointer transition-colors">Terms</span>
