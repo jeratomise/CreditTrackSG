@@ -18,7 +18,7 @@ export const FloatingShareBar: React.FC = () => {
     const fetchStats = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.session?.access_token;
+        const token = session?.access_token;
         if (!token) return;
         const res = await fetch('/api/referrals/stats', {
           headers: { Authorization: `Bearer ${token}` },
