@@ -229,33 +229,125 @@ async function runWeeklyUpdate(testUserId?: string) {
           <p>Here is your weekly overview of your credit card bills. Please review your outstanding balances and schedule your payments for the week.</p>
       `;
 
-      emailHtml += `<h3 style="color: #dc2626; border-bottom: 1px solid #eee; padding-bottom: 8px;">🔴 Action Required: Unpaid Bills</h3>`;
-      if (unpaidBills.length > 0) {
-        emailHtml += `<ul style="background: #fef2f2; padding: 20px 40px; border-radius: 8px; border: 1px solid #fecaca;">`;
-        unpaidBills.forEach((b: any) => {
+      // Sort unpaid bills by urgency (most urgent first)
+      const sortedUnpaid = [...unpaidBills].sort((a, b) => {
+        const daysA = getDaysRemaining(a.due_date);
+        const daysB = getDaysRemaining(b.due_date);
+        return daysA - daysB;
+      });
+
+      emailHtml += `<h3 style="color: #dc2626; border-bottom: 1px solid #eee; padding-bottom: 8px;">🔴 Bills Needing Payment</h3>`;
+      if (sortedUnpaid.length > 0) {
+        emailHtml += `
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <thead>
+              <tr style="background: #f9fafb;">
+                <th style="padding: 10px 12px; text-align: left; font-size: 12px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e5e7eb;">Card</th>
+                <th style="padding: 10px 12px; text-align: right; font-size: 12px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e5e7eb;">Amount</th>
+                <th style="padding: 10px 12px; text-align: right; font-size: 12px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e5e7eb;">Due Date</th>
+                <th style="padding: 10px 12px; text-align: center; font-size: 12px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e5e7eb;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+ `;
+        sortedUnpaid.forEach((b: any) => {
+          const daysLeft = getDaysRemaining(b.due_date);
           const maskedCard = maskCardName(b.card_name);
           const amount = `$${b.total_amount.toFixed(2)}`;
           const d = new Date(b.due_date);
-          const dueDate = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-          emailHtml += `<li style="margin-bottom: 10px;"><strong>${maskedCard}</strong> (${b.bank_name})<br/>Amount: <strong>${amount}</strong><br/>Deadline: <strong>${dueDate}</strong></li>`;
+          const dueDateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+
+          // Urgency styling
+          let rowBg, statusBg, statusColor, statusText;
+          if (daysLeft < 0) {
+            rowBg = '#fef2f2';
+            statusBg = '#dc2626';
+            statusColor = '#ffffff';
+            statusText = `Overdue by ${Math.abs(daysLeft)} day${Math.abs(daysLeft) !== 1 ? 's' : ''}`;
+          } else if (daysLeft <= 3) {
+            rowBg = '#fef2f2';
+            statusBg = '#dc2626';
+            statusColor = '#ffffff';
+            statusText = `Due in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`;
+          } else if (daysLeft <= 7) {
+            rowBg = '#fffbeb';
+            statusBg = '#f59e0b';
+            statusColor = '#ffffff';
+            statusText = `Due in ${daysLeft} days`;
+          } else if (daysLeft <= 14) {
+            rowBg = '#fef9c3';
+            statusBg = '#eab308';
+            statusColor = '#ffffff';
+            statusText = `Due in ${daysLeft} days`;
+          } else {
+            rowBg = '#f9fafb';
+            statusBg = '#6b7280';
+            statusColor = '#ffffff';
+            statusText = `Due in ${daysLeft} days`;
+          }
+
+          emailHtml += `
+            <tr style="border-bottom: 1px solid #f3f4f6;">
+              <td style="padding: 12px; background: ${rowBg};">
+                <strong style="color: #111827;">${maskedCard}</strong><br/>
+                <span style="font-size: 12px; color: #6b7280;">${b.bank_name}</span>
+              </td>
+              <td style="padding: 12px; text-align: right; background: ${rowBg};">
+                <strong style="color: #111827; font-size: 16px;">${amount}</strong>
+              </td>
+              <td style="padding: 12px; text-align: right; background: ${rowBg};">
+                <span style="color: #374151;">${dueDateStr}</span>
+              </td>
+              <td style="padding: 12px; text-align: center; background: ${rowBg};">
+                <span style="display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; background: ${statusBg}; color: ${statusColor};">
+                  ${statusText}
+                </span>
+              </td>
+            </tr>
+          `;
         });
-        emailHtml += `</ul>`;
-        emailHtml += `<p style="font-size: 16px;"><strong>Action to take:</strong> Schedule payments for the above bills before their respective deadlines to avoid late fees.</p>`;
+        emailHtml += `
+            </tbody>
+          </table>
+          <p style="font-size: 14px; color: #374151; margin-bottom: 24px;">
+            <strong>Action required:</strong> Please arrange payments for the bills above before their deadlines to avoid late fees and interest charges.
+</p>
+        `;
       } else {
-        emailHtml += `<p style="color: #059669; font-weight: bold;">Great job! You have no unpaid bills at the moment.</p>`;
+        emailHtml += `
+          <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+            <p style="color: #065f46; font-weight: bold; margin: 0;">✅ Great news — all your bills are paid up! No action needed this week.</p>
+          </div>
+        `;
       }
 
-      emailHtml += `<h3 style="color: #059669; border-bottom: 1px solid #eee; padding-bottom: 8px; margin-top: 30px;">🟢 Recently Paid Bills</h3>`;
-      if (paidBills.length > 0) {
-        emailHtml += `<ul style="background: #ecfdf5; padding: 20px 40px; border-radius: 8px; border: 1px solid #a7f3d0;">`;
-        paidBills.slice(0, 5).forEach((b: any) => {
+      // Recently paid bills
+      const recentPaid = paidBills.slice(0, 5);
+      emailHtml += `<h3 style="color: #059669; border-bottom: 1px solid #eee; padding-bottom: 8px; margin-top: 30px;">🟢 Recently Paid</h3>`;
+      if (recentPaid.length > 0) {
+        emailHtml += `
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <tbody>
+        `;
+        recentPaid.forEach((b: any) => {
           const maskedCard = maskCardName(b.card_name);
           const amount = `$${b.total_amount.toFixed(2)}`;
-          emailHtml += `<li style="margin-bottom: 10px;"><strong>${maskedCard}</strong> (${b.bank_name}) - <strong>${amount}</strong> (Paid)</li>`;
+          emailHtml += `
+            <tr style="border-bottom: 1px solid #f3f4f6;">
+              <td style="padding: 10px 0;">
+                <strong style="color: #111827;">${maskedCard}</strong>
+                <span style="color: #6b7280; font-size: 13px;"> ${b.bank_name}</span>
+              </td>
+              <td style="padding: 10px 0; text-align: right;">
+                <span style="color: #059669; font-weight: 600;">${amount}</span>
+                <span style="margin-left: 8px; font-size: 11px; background: #d1fae5; color: #065f46; padding: 2px 8px; border-radius: 9999px; font-weight: 600;">PAID</span>
+              </td>
+            </tr>
+          `;
         });
-        emailHtml += `</ul>`;
+        emailHtml += `</tbody></table>`;
       } else {
-        emailHtml += `<p>No recently paid bills.</p>`;
+        emailHtml += `<p style="color: #9ca3af;">No recently paid bills.</p>`;
       }
 
       emailHtml += `
