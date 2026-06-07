@@ -125,8 +125,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
   }, [bills]);
 
   const filteredBills = useMemo(() => {
-    if (selectedMonthFilter === 'ALL') return bills;
-    return bills.filter(b => b.dueDate.startsWith(selectedMonthFilter));
+    let result = selectedMonthFilter === 'ALL' ? bills : bills.filter(b => b.dueDate.startsWith(selectedMonthFilter));
+    // Sort: unpaid first, then most recent due date first
+    return [...result].sort((a, b) => {
+      if (a.isPaid !== b.isPaid) return a.isPaid ? 1 : -1;
+      return new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime();
+    });
   }, [bills, selectedMonthFilter]);
 
   const handlePaymentConfirm = (billId: string, details: PaymentDetails) => {
