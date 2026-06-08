@@ -5,84 +5,101 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev      # Start development server (tsx server.ts — runs Express backend)
-npm run build    # Build frontend (vite build)
-npm run preview  # Preview production build
-npm start        # Run production server
+npm run dev        # Local dev: tsx server.ts — imports the prod app + Vite HMR on :3000
+npm run build      # Production build of the SPA (vite build → dist/)
+npm run preview    # Preview the built SPA
+npm start          # tsx server.ts (self-hosted run; set NODE_ENV=production to serve dist/)
+npm run typecheck  # tsc --noEmit (the build itself is esbuild-based and does NOT type-check)
 ```
 
-There is no test or lint script configured.
+No test suite is configured. The production build is **esbuild-based via Vite** — it does NOT run `tsc`, so type errors don't fail the build; run `npm run typecheck` to catch them.
 
 ## Architecture
 
-Full-stack TypeScript monorepo: React SPA (Vite) + Express backend in a single repo.
+Full-stack TypeScript monorepo: a React SPA (Vite) + an Express backend, deployed on **Vercel**.
 
-**Entry points:**
-- `index.tsx` → React app
-- `server.ts` → Express server (also serves the built frontend in production)
+**Single backend, two entry points (consolidated):**
+- `api/server.ts` — **the entry.** Only wires middleware (security headers, a JSON parser that skips the Stripe webhook path so the raw body survives) and mounts the routers; `export default app` is the Vercel serverless entry (`vercel.json` routes `/api/*` here). Re-exports `runDailyReminders` / `runWeeklyUpdate` from `./cron` for dev.
+- `server.ts` — **local dev wrapper only.** Imports the SAME `app` + cron fns from `api/server.ts`, loads `dotenv` first, mounts Vite/static, schedules in-process cron, and `listen`s. Never add routes here.
 
-**Request flow:**
+**Backend layout:**
+- `api/lib/` — shared, no HTTP: `clients.ts` (Supabase service-role / Stripe / Resend / Gemini init), `util.ts` (`esc`, `maskCardName`, `getDaysRemaining`), `auth.ts` (`requireAuth` → `req.authUser`, `validateCronSecret`), `email.ts` (`sendEmail`), `ai.ts` (Gemini extract/insights + prompt & schema — single source for the AI prompt), `validation.ts` (Zod schemas + `validate()` helper).
+- `api/cron.ts` — `runDailyReminders` / `runWeeklyUpdate` (the email-building scheduled jobs).
+- `api/routes/` — one Express `Router` per domain, each declaring absolute `/api/...` paths: `billing.ts` (webhook + checkout + portal), `health.ts` (health + status), `reminders.ts` (schedule/cancel reminder + email-logs), `ai.ts` (extract-bill + insights), `triggers.ts` (cron triggers), `referrals.ts`.
+
+Add a new endpoint by editing the matching router (or adding one and mounting it in `api/server.ts`). The Stripe webhook MUST stay on the JSON-parser skip-list in `api/server.ts`.
+
+**Production request flow:**
 ```
-Browser (React) → Express (server.ts) → Supabase (DB/Auth/Storage)
-                                       → Google Gemini API (AI extraction)
-                                       → Resend API (email delivery)
+Browser (React SPA) → Vercel static (dist/) for the app
+                    → /api/* → api/server.ts (serverless) → Supabase (DB/Auth/Storage)
+                                                           → Google Gemini (server-side AI)
+                                                           → Resend (email)
+                                                           → Stripe (billing)
 ```
+
+**Frontend navigation:** single-page, **no router library**. `App.tsx` holds a `view` state (`'dashboard' | 'upload' | 'settings' | 'admin' | 'logs' | 'referral'`) and swaps components. `index.tsx` wraps `<App>` in `<AuthProvider>` + Vercel `<Analytics>`.
 
 **Key layers:**
 
-| Layer | Files |
-|-------|-------|
+| Concern | Files |
+|---|---|
 | Types | `types.ts` |
-| Constants & AI prompts | `constants.ts` |
-| Auth & user session | `contexts/AuthContext.tsx` |
-| Database CRUD | `services/dbService.ts` |
-| AI (Gemini) | `services/geminiService.ts` |
-| Supabase client | `lib/supabaseClient.ts` |
-| Backend & cron jobs | `server.ts` |
-| UI components | `components/` |
+| Constants & AI prompts | `constants.ts` (`MILELION_SYSTEM_PROMPT`) |
+| Auth & session, admin actions | `contexts/AuthContext.tsx` |
+| DB CRUD (browser → Supabase) | `services/dbService.ts` |
+| AI client (browser → our API) | `services/geminiService.ts` |
+| Browser Supabase client (anon key) | `lib/supabaseClient.ts` |
+| Backend entry (prod) | `api/server.ts` (middleware + router mounting) |
+| HTTP route handlers | `api/routes/` (billing, health, reminders, ai, triggers, referrals) |
+| Scheduled jobs | `api/cron.ts` |
+| Backend shared logic | `api/lib/` (clients, util, auth, email, ai, validation) |
+| Backend (dev only) | `server.ts` |
+| DB migrations | `supabase/migrations/` |
+
+## Security invariants (do not regress)
+
+These were established in a security review; preserve them in any refactor:
+
+- **Backend uses the Supabase SERVICE ROLE key** (`SUPABASE_SERVICE_ROLE_KEY`), which bypasses RLS. Therefore every user-facing endpoint MUST authenticate via `requireAuth` and derive identity from the verified JWT (`req.authUser.id`) — **never trust a `userId`/`email` from the request body or query** (prevents IDOR).
+- **RLS is enabled on every table** and is the real authorization boundary for browser→Supabase calls (the anon key is public). See `supabase/migrations/007_security_hardening.sql`.
+- **`profiles` privileged columns** (`role`, `status`, `stripe_*`, `pro_*`) are protected by a DB trigger — clients cannot escalate to admin/pro. Role grants happen server-side only (Stripe webhook for `pro`; manual SQL for `admin`).
+- **Gemini runs server-side only** (`/api/extract-bill`, `/api/insights`) using `GEMINI_API_KEY`. Never reintroduce `VITE_GEMINI_API_KEY` — any `VITE_`-prefixed var is inlined into the browser bundle.
+- **Bill extraction reads the uploaded file from Supabase Storage by path** (ownership-checked) rather than accepting base64 in the body — keeps the key server-side and avoids Vercel's ~4.5 MB body limit.
+- **Emails:** all user-controlled text is escaped via `esc()` before HTML interpolation.
+- **Cron endpoints fail closed:** `/api/trigger-*` require `CRON_SECRET` (constant-time compare) and refuse to run if it's unset.
+- Secrets come only from env vars — never hardcode keys (a Resend key was previously hardcoded in `server.ts`).
 
 ## Environment Variables
 
 ```
-VITE_SUPABASE_URL        # Supabase project URL (used in frontend via Vite)
-VITE_SUPABASE_ANON_KEY   # Supabase anon key (used in frontend)
-SUPABASE_URL             # Supabase URL (used in backend/server.ts)
-SUPABASE_ANON_KEY        # Supabase anon key (used in backend)
-GEMINI_API_KEY           # Google Gemini API key (server-side only)
-RESEND_API_KEY           # Resend email API key (server-side only)
-EMAIL_FROM               # Sender address for email notifications
+# Frontend (inlined into the browser bundle — only PUBLIC values here)
+VITE_SUPABASE_URL
+VITE_SUPABASE_ANON_KEY
+
+# Backend (server-only — never VITE_ prefixed)
+SUPABASE_URL / SUPABASE_ANON_KEY        # fallbacks
+SUPABASE_SERVICE_ROLE_KEY               # privileged backend DB access (required in prod)
+GEMINI_API_KEY                          # server-side Gemini
+RESEND_API_KEY / EMAIL_FROM             # email delivery
+STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET
+STRIPE_PRO_PRICE_ID_MONTHLY / STRIPE_PRO_PRICE_ID_ANNUAL
+CRON_SECRET                             # auth for Vercel Cron → /api/trigger-*
+APP_URL                                 # base URL for links/redirects
 ```
 
-## Domain Context
+## Supabase
 
-The app is tailored for **Singapore credit card miles optimization**, drawing on The MileLion strategy. Key domain concepts:
-- **Miles per dollar (mpd)** — the core metric for card optimization
-- Supported banks: DBS, UOB, Citibank, HSBC, OCBC, Standard Chartered, AMEX
-- AI prompts in `constants.ts` contain detailed Singapore card-specific logic for categorizing spend and detecting missed miles
+Tables: `profiles`, `bills`, `transactions`, `system_config`, `email_logs`, `referrals`, `ai_insights`, `user_settings`, `annual_fees`. Storage bucket: `bill-documents` (1-hour signed URLs). Migrations live in `supabase/migrations/` (apply with `supabase db push`; 007 is the security-hardening migration and assumes the service-role backend is deployed first).
 
-## Supabase Schema
+## Cron (production = Vercel Cron, not node-cron)
 
-Core tables: `profiles`, `bills`, `transactions`, `system_config`, `email_logs`
-Storage bucket: `bill-documents` (signed URLs with 1-hour expiry)
+`vercel.json` defines the schedule and hits `/api/trigger-weekly` (and reminders) with `Authorization: Bearer CRON_SECRET`. The in-process `cron.schedule(...)` in `server.ts` only runs in local dev. Reminders also use Resend `scheduledAt` (see `/api/schedule-reminder`) keyed off bill due dates.
 
-## Cron Jobs (server.ts)
+## Roles & billing
 
-- **Daily 9 AM** — bill payment reminders for bills due within 3 days
-- **Monday 9 AM** — weekly financial summary emails
+Roles: `user`, `pro`, `admin`. `pro` is granted by the verified Stripe webhook (`checkout.session.completed`) and revoked on cancellation; `admin` is set manually in the DB. Referrals (`/api/referrals/*`) reward the referrer only when the referee is a genuine paying Pro.
 
-Manual trigger endpoints exist at `/api/trigger-reminders` and `/api/trigger-weekly` for testing.
+## Domain context
 
-## AI Integration
-
-`services/geminiService.ts` uses **Gemini 2.5 Flash** for:
-- Extracting bill data from uploaded PDFs/images
-- Splitting consolidated multi-card statements
-- Transaction categorization and optimization advice
-- Risk score calculation (0–100)
-
-All Gemini prompts are centralized in `constants.ts`.
-
-## Auth & Roles
-
-`contexts/AuthContext.tsx` manages Supabase Auth. Two roles: `admin` and `user`.
-Admins can manage users (activate/suspend), configure system settings, and view email logs via `AdminPanel.tsx`.
+Tailored for **Singapore credit-card miles optimization** (The MileLion strategy). Core metric is **miles per dollar (mpd)**; supported banks include DBS, UOB, Citibank, HSBC, OCBC, Standard Chartered, AMEX. The AI extracts/splits consolidated multi-card statements, categorizes spend, flags missed-miles opportunities, and computes a 0–100 risk score. AI runs server-side only: `MILELION_SYSTEM_PROMPT` (the persona) lives in `constants.ts`; the extraction/insights prompts, response schemas, and Gemini calls live in `api/lib/ai.ts`. The browser never holds the Gemini key.

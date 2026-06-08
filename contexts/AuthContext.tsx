@@ -147,11 +147,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (error) throw error;
     // data.session is null when email confirmation is required — insert profile only if we have a live session
     if (data.user && data.session) {
+        // Role is intentionally NOT set here. The database forces role='user' /
+        // status='active' on any client-side write (see migration 007); admin/pro
+        // are granted only server-side (service role) — via the Stripe webhook for
+        // Pro, or a manual SQL grant for admin. Setting role here would be ignored.
         await supabase.from('profiles').insert({
             id: data.user.id,
             email: email,
             name: name,
-            role: email === 'jeratomise@gmail.com' ? 'admin' : 'user'
         });
 
         // Track referral if code was provided

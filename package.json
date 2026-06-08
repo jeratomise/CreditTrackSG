@@ -7,7 +7,11 @@
     "dev": "tsx server.ts",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server.ts"
+    "start": "tsx server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   },
   "dependencies": {
     "@google/genai": "^1.43.0",
@@ -23,7 +27,8 @@
     "recharts": "^2.13.0",
     "resend": "^6.9.3",
     "stripe": "^20.4.1",
-    "tailwind-merge": "^2.5.4"
+    "tailwind-merge": "^2.5.4",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

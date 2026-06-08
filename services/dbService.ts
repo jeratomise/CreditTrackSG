@@ -233,17 +233,21 @@ export const dbService = {
   // Call after a bill is created to schedule a Resend email 3 days before due date
   async scheduleReminder(bill: Bill, user: User): Promise<void> {
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
       const response = await fetch('/api/schedule-reminder', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        // Identity (email, name, userId) is derived server-side from the auth token.
+        // We only send the bill details the server needs to compose the reminder.
         body: JSON.stringify({
-          userEmail: user.email,
-          userName: user.name,
           cardName: bill.cardName,
           bankName: bill.bankName,
           amount: bill.totalAmount,
           dueDate: bill.dueDate,
-          userId: user.id,
           billId: bill.id,
         })
       });
@@ -260,9 +264,14 @@ export const dbService = {
   // Call when a bill is marked as paid to cancel the pending Resend reminder
   async cancelReminder(reminderEmailId: string): Promise<void> {
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
       await fetch('/api/cancel-reminder', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ reminderEmailId })
       });
     } catch (err) {

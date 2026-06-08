@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabaseClient';
 import { EmailLog } from '../types';
 import { Mail, Calendar, ExternalLink, Loader2 } from 'lucide-react';
 
@@ -13,7 +14,11 @@ export const EmailLogs: React.FC = () => {
     const fetchLogs = async () => {
       if (!user) return;
       try {
-        const response = await fetch(`/api/email-logs?userId=${user.id}`);
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
+        const response = await fetch('/api/email-logs', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (!response.ok) {
           throw new Error('Failed to fetch logs');
         }

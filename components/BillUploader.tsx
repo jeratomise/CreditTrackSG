@@ -41,94 +41,67 @@ export const BillUploader: React.FC<BillUploaderProps> = ({ onBillProcessed }) =
          throw new Error(`File ${file.name} exceeds 10MB limit.`);
      }
 
-     return new Promise(async (resolve, reject) => {
-        const reader = new FileReader();
-        
-        reader.onload = async () => {
+     try {
+        // 1. Upload to Supabase Storage FIRST. The backend reads the file from
+        //    storage to run AI extraction server-side, so the Gemini API key is
+        //    never exposed to the browser and large files don't hit request limits.
+        let uploadedFilePath: string;
+        try {
+            uploadedFilePath = (await uploadWithTimeout(dbService.uploadBillDocument(file, user.id))) as string;
+        } catch (uploadErr: any) {
+            throw new Error(`Could not upload ${file.name}: ${uploadErr?.message || "Unknown error"}. Please try again.`);
+        }
+
+        // 2. Server-side AI extraction (authenticated; reads the uploaded file).
+        let extractedData: Awaited<ReturnType<typeof extractBillData>>;
+        try {
+            extractedData = await uploadWithTimeout(extractBillData(uploadedFilePath));
+        } catch (aiErr: any) {
+            console.error("AI Error:", aiErr);
+            throw new Error(`AI Analysis failed: ${aiErr?.message || "Unknown error"}`);
+        }
+
+        if (!extractedData.bills || extractedData.bills.length === 0) {
+            throw new Error(`No bill details found in ${file.name}. Ensure text is legible.`);
+        }
+
+        const createdBills: Bill[] = [];
+
+        // 3. Save Bills to DB (using the single uploaded file path)
+        for (const billData of extractedData.bills) {
+            const tempBill: Bill = {
+                id: 'temp', // DB assigns ID
+                bankName: billData.bankName || "Unknown Bank",
+                cardName: billData.cardName || "Unknown Card",
+                statementDate: billData.statementDate || new Date().toISOString().split('T')[0],
+                dueDate: billData.dueDate || new Date().toISOString().split('T')[0],
+                totalAmount: billData.totalAmount,
+                isPaid: false,
+                uploadedAt: new Date().toISOString(),
+                riskScore: 0,
+                transactions: (billData.transactions || []).map((t) => ({
+                    id: 'temp',
+                    date: t.date,
+                    description: t.description,
+                    amount: t.amount,
+                    category: t.category,
+                    suggestedCard: "Analyzing...",
+                }))
+            };
+
             try {
-                const base64String = (reader.result as string).split(',')[1];
-                
-                // Determine Mime Type robustly
-                let mimeType = file.type;
-                if (!mimeType || mimeType === '') {
-                    if (file.name.toLowerCase().endsWith('.pdf')) mimeType = 'application/pdf';
-                    else if (file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg')) mimeType = 'image/jpeg';
-                    else if (file.name.toLowerCase().endsWith('.png')) mimeType = 'image/png';
-                    else mimeType = 'application/pdf'; // Default fallback
-                }
-
-                // --- PARALLEL EXECUTION START ---
-                // Start uploading to Storage and analyzing with AI at the same time
-                const [uploadResult, aiResult] = await Promise.allSettled([
-                    uploadWithTimeout(dbService.uploadBillDocument(file, user.id)),
-                    extractBillData(base64String, mimeType)
-                ]);
-
-                // 1. Handle AI Result
-                if (aiResult.status === 'rejected') {
-                    console.error("AI Error:", aiResult.reason);
-                    throw new Error(`AI Analysis failed: ${aiResult.reason?.message || "Unknown error"}`);
-                }
-                const extractedData = aiResult.value;
-                
-                if (!extractedData.bills || extractedData.bills.length === 0) {
-                     throw new Error(`No bill details found in ${file.name}. Ensure text is legible.`);
-                }
-
-                // 2. Handle Upload Result
-                let uploadedFilePath: string | undefined = undefined;
-                if (uploadResult.status === 'fulfilled') {
-                    uploadedFilePath = uploadResult.value as string;
-                } else {
-                    console.warn(`File upload failed for ${file.name}:`, uploadResult.reason);
-                    // We allow the bill to be created even if the PDF upload failed, 
-                    // but we might want to notify the user.
-                }
-                // --- PARALLEL EXECUTION END ---
-
-                const createdBills: Bill[] = [];
-
-                // 3. Save Bills to DB (Using the single uploaded file path)
-                for (const billData of extractedData.bills) {
-                    const tempBill: Bill = {
-                        id: 'temp', // DB assigns ID
-                        bankName: billData.bankName || "Unknown Bank",
-                        cardName: billData.cardName || "Unknown Card",
-                        statementDate: billData.statementDate || new Date().toISOString().split('T')[0],
-                        dueDate: billData.dueDate || new Date().toISOString().split('T')[0],
-                        totalAmount: billData.totalAmount,
-                        isPaid: false,
-                        uploadedAt: new Date().toISOString(),
-                        riskScore: 0,
-                        transactions: (billData.transactions || []).map((t) => ({
-                            id: 'temp',
-                            date: t.date,
-                            description: t.description,
-                            amount: t.amount,
-                            category: t.category,
-                            suggestedCard: "Analyzing...",
-                        }))
-                    };
-
-                    // Pass the already uploaded path
-                    try {
-                        const savedBill = await dbService.createBill(tempBill, user.id, uploadedFilePath);
-                        createdBills.push(savedBill);
-                    } catch (dbErr: any) {
-                        console.error("DB Save Error:", dbErr);
-                        throw new Error(`Database save failed: ${dbErr.message}`);
-                    }
-                }
-
-                resolve(createdBills);
-            } catch (err: any) {
-                reject(new Error(`Failed to parse ${file.name}: ${err.message || "Unknown error"}`));
+                const savedBill = await dbService.createBill(tempBill, user.id, uploadedFilePath);
+                createdBills.push(savedBill);
+            } catch (dbErr: any) {
+                console.error("DB Save Error:", dbErr);
+                throw new Error(`Database save failed: ${dbErr.message}`);
             }
-        };
+        }
 
-        reader.onerror = () => reject(new Error(`Error reading file: ${file.name}`));
-        reader.readAsDataURL(file);
-     });
+        return createdBills;
+     } catch (err: any) {
+        throw new Error(`Failed to parse ${file.name}: ${err.message || "Unknown error"}`);
+     }
   }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
