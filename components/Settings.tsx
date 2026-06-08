@@ -89,7 +89,7 @@ export const Settings: React.FC = () => {
       setRefLoading(true);
       try {
         const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData?.access_token;
+        const token = sessionData?.session?.access_token;
         if (!token) return;
         const res = await fetch('/api/referrals/stats', {
           headers: { Authorization: `Bearer ${token}` },
