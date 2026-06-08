@@ -2,9 +2,9 @@
 // /api/trigger-* (see routes/triggers.ts); in local dev they're scheduled in-process
 // by server.ts. Pass a testUserId to target a single user (and force-send to the
 // test inbox) for manual testing.
-import { supabase } from "./lib/clients";
-import { esc, maskCardName, getDaysRemaining } from "./lib/util";
-import { sendEmail } from "./lib/email";
+import { supabase } from "./lib/clients.js";
+import { esc, maskCardName, getDaysRemaining } from "./lib/util.js";
+import { sendEmail } from "./lib/email.js";
 
 export async function runDailyReminders(testUserId?: string) {
   console.log("Running daily reminder cron job...");

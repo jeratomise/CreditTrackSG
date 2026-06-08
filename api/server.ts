@@ -12,12 +12,12 @@
 // ──────────────────────────────────────────────────────────────────────────
 import express from "express";
 
-import billingRouter from "./routes/billing";
-import healthRouter from "./routes/health";
-import remindersRouter from "./routes/reminders";
-import aiRouter from "./routes/ai";
-import triggersRouter from "./routes/triggers";
-import referralsRouter from "./routes/referrals";
+import billingRouter from "./routes/billing.js";
+import healthRouter from "./routes/health.js";
+import remindersRouter from "./routes/reminders.js";
+import aiRouter from "./routes/ai.js";
+import triggersRouter from "./routes/triggers.js";
+import referralsRouter from "./routes/referrals.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -51,6 +51,6 @@ app.use(referralsRouter);
 
 // Re-exported so the local dev server (server.ts) can schedule them in-process.
 // In production these run via Vercel Cron hitting /api/trigger-*.
-export { runDailyReminders, runWeeklyUpdate } from "./cron";
+export { runDailyReminders, runWeeklyUpdate } from "./cron.js";
 
 export default app;

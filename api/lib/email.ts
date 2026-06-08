@@ -1,4 +1,4 @@
-import { resend, defaultFromEmail, supabase } from "./clients";
+import { resend, defaultFromEmail, supabase } from "./clients.js";
 
 export interface EmailUser {
   id: string;

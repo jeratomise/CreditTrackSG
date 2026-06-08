@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { supabase } from "../lib/clients";
-import { validateCronSecret } from "../lib/auth";
-import { runDailyReminders, runWeeklyUpdate } from "../cron";
+import { supabase } from "../lib/clients.js";
+import { validateCronSecret } from "../lib/auth.js";
+import { runDailyReminders, runWeeklyUpdate } from "../cron.js";
 
 const router = Router();
 

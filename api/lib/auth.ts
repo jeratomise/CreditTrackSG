@@ -1,7 +1,7 @@
 import express from "express";
 import crypto from "crypto";
 import type { User } from "@supabase/supabase-js";
-import { supabase } from "./clients";
+import { supabase } from "./clients.js";
 
 // Express request augmented with the verified Supabase user. Handlers behind
 // requireAuth can rely on req.authUser being present.

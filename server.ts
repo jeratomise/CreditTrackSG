@@ -18,7 +18,7 @@ import express from "express";
 import cron from "node-cron";
 import path from "path";
 import { fileURLToPath } from "url";
-import app, { runDailyReminders, runWeeklyUpdate } from "./api/server";
+import app, { runDailyReminders, runWeeklyUpdate } from "./api/server.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

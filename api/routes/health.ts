@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { supabase } from "../lib/clients";
+import { supabase } from "../lib/clients.js";
 
 const router = Router();
 
