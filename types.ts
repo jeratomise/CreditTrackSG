@@ -15,7 +15,10 @@ export interface User {
   email: string;
   joinedAt: string;
   role: 'admin' | 'user' | 'pro';
-  status: 'active' | 'suspended';
+  status: 'active' | 'suspended' | 'pending';
+  // True when the user has signed up but hasn't completed activation (no profile
+  // row yet — i.e. not confirmed/logged in). Only populated by the admin users API.
+  pending?: boolean;
 }
 
 export interface SystemConfig {

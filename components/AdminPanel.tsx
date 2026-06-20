@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabaseClient';
 import { User, SystemConfig } from '../types';
 import { Users, Shield, Save, Type, Trash2, Power, LayoutTemplate, Plus } from 'lucide-react';
 
@@ -23,10 +24,23 @@ export const AdminPanel: React.FC = () => {
   const loadUsers = async () => {
       setLoadingUsers(true);
       try {
-          const list = await getAllUsers();
-          setUsersList(list);
+          // Use the admin endpoint so PENDING signups (in auth.users but not yet in
+          // profiles) are included. Falls back to the profiles-only list on failure.
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData?.session?.access_token;
+          const res = await fetch('/api/admin/users', {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          if (res.ok) {
+              const list = await res.json();
+              setUsersList(list);
+          } else {
+              const list = await getAllUsers();
+              setUsersList(list);
+          }
       } catch (err) {
           console.error(err);
+          try { setUsersList(await getAllUsers()); } catch { /* ignore */ }
       } finally {
           setLoadingUsers(false);
       }
@@ -138,7 +152,9 @@ export const AdminPanel: React.FC = () => {
                                         <div className="text-xs text-gray-400">{u.email}</div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        {u.role === 'admin' ? (
+                                        {u.pending ? (
+                                            <span className="text-xs text-gray-400 italic">—</span>
+                                        ) : u.role === 'admin' ? (
                                             <span className="px-2 py-1 rounded text-xs font-medium uppercase bg-purple-100 text-purple-700">
                                                 Admin
                                             </span>
@@ -167,14 +183,20 @@ export const AdminPanel: React.FC = () => {
                                         })()}
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit ${
-                                            u.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                                        }`}>
-                                            {u.status === 'active' ? 'Active' : 'Suspended'}
-                                        </span>
+                                        {u.pending ? (
+                                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 w-fit inline-block whitespace-nowrap">
+                                                Pending Activation
+                                            </span>
+                                        ) : (
+                                            <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit ${
+                                                u.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                            }`}>
+                                                {u.status === 'active' ? 'Active' : 'Suspended'}
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4">
-                                        {u.email !== user?.email && (
+                                        {!u.pending && u.email !== user?.email && (
                                             <button 
                                                 onClick={() => handleToggleStatus(u.id)}
                                                 className={`p-2 rounded-lg transition-colors ${
