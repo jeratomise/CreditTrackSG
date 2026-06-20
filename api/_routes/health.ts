@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { supabase } from "../lib/clients.js";
-import { requireAuth } from "../lib/auth.js";
+import { supabase } from "../_lib/clients.js";
+import { requireAuth } from "../_lib/auth.js";
 
 // System + admin utility routes. NOTE: kept together in one router (rather than a
 // separate admin.ts) on purpose — Vercel turns each api/*.ts file into its own

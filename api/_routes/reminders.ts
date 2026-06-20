@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { supabase, resend, defaultFromEmail } from "../lib/clients.js";
-import { esc, maskCardName } from "../lib/util.js";
-import { requireAuth } from "../lib/auth.js";
-import { validate, scheduleReminderSchema, cancelReminderSchema } from "../lib/validation.js";
+import { supabase, resend, defaultFromEmail } from "../_lib/clients.js";
+import { esc, maskCardName } from "../_lib/util.js";
+import { requireAuth } from "../_lib/auth.js";
+import { validate, scheduleReminderSchema, cancelReminderSchema } from "../_lib/validation.js";
 
 const router = Router();
 

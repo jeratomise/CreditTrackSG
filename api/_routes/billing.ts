@@ -1,8 +1,8 @@
 import express, { Router } from "express";
 import Stripe from "stripe"; // used for webhook event types
-import { stripe, supabase } from "../lib/clients.js";
-import { requireAuth } from "../lib/auth.js";
-import { validate, checkoutSchema } from "../lib/validation.js";
+import { stripe, supabase } from "../_lib/clients.js";
+import { requireAuth } from "../_lib/auth.js";
+import { validate, checkoutSchema } from "../_lib/validation.js";
 
 const router = Router();
 

@@ -23,11 +23,11 @@ Full-stack TypeScript monorepo: a React SPA (Vite) + an Express backend, deploye
 - `server.ts` — **local dev wrapper only.** Imports the SAME `app` + cron fns from `api/server.ts`, loads `dotenv` first, mounts Vite/static, schedules in-process cron, and `listen`s. Never add routes here.
 
 **Backend layout:**
-- `api/lib/` — shared, no HTTP: `clients.ts` (Supabase service-role / Stripe / Resend / Gemini init), `util.ts` (`esc`, `maskCardName`, `getDaysRemaining`), `auth.ts` (`requireAuth` → `req.authUser`, `validateCronSecret`), `email.ts` (`sendEmail`), `ai.ts` (Gemini extract/insights + prompt & schema — single source for the AI prompt), `validation.ts` (Zod schemas + `validate()` helper).
-- `api/cron.ts` — `runDailyReminders` / `runWeeklyUpdate` (the email-building scheduled jobs).
-- `api/routes/` — one Express `Router` per domain, each declaring absolute `/api/...` paths: `billing.ts` (webhook + checkout + portal), `health.ts` (health + status), `reminders.ts` (schedule/cancel reminder + email-logs), `ai.ts` (extract-bill + insights), `triggers.ts` (cron triggers), `referrals.ts`.
+- `api/_lib/` — shared, no HTTP: `clients.ts` (Supabase service-role / Stripe / Resend / Gemini init), `util.ts` (`esc`, `maskCardName`, `getDaysRemaining`), `auth.ts` (`requireAuth` → `req.authUser`, `validateCronSecret`), `email.ts` (`sendEmail`), `ai.ts` (Gemini extract/insights + prompt & schema — single source for the AI prompt), `validation.ts` (Zod schemas + `validate()` helper).
+- `api/_cron.ts` — `runDailyReminders` / `runWeeklyUpdate` (the email-building scheduled jobs).
+- `api/_routes/` — one Express `Router` per domain, each declaring absolute `/api/...` paths: `billing.ts` (webhook + checkout + portal), `health.ts` (health + status + the admin `/api/admin/users` listing), `reminders.ts` (schedule/cancel reminder + email-logs), `ai.ts` (extract-bill + insights), `triggers.ts` (cron triggers), `referrals.ts`.
 
-Add a new endpoint by editing the matching router (or adding one and mounting it in `api/server.ts`). The Stripe webhook MUST stay on the JSON-parser skip-list in `api/server.ts`.
+⚠️ **The `_` prefix is load-bearing — do not remove it.** Vercel turns every NON-underscore `.ts` file under `api/` into its own serverless function, and the Hobby plan caps a deployment at **12 functions**. The helper dirs are prefixed with `_` so Vercel ignores them and bundles them into the single `api/server.ts` function. So: **never add a new top-level `api/*.ts` file** (it becomes a 13th+ function and the deploy fails at "Deploying outputs"); add endpoints inside an existing `api/_routes/*.ts` router instead. The Stripe webhook MUST stay on the JSON-parser skip-list in `api/server.ts`.
 
 **Production request flow:**
 ```
@@ -51,9 +51,9 @@ Browser (React SPA) → Vercel static (dist/) for the app
 | AI client (browser → our API) | `services/geminiService.ts` |
 | Browser Supabase client (anon key) | `lib/supabaseClient.ts` |
 | Backend entry (prod) | `api/server.ts` (middleware + router mounting) |
-| HTTP route handlers | `api/routes/` (billing, health, reminders, ai, triggers, referrals) |
-| Scheduled jobs | `api/cron.ts` |
-| Backend shared logic | `api/lib/` (clients, util, auth, email, ai, validation) |
+| HTTP route handlers | `api/_routes/` (billing, health, reminders, ai, triggers, referrals) |
+| Scheduled jobs | `api/_cron.ts` |
+| Backend shared logic | `api/_lib/` (clients, util, auth, email, ai, validation) |
 | Backend (dev only) | `server.ts` |
 | DB migrations | `supabase/migrations/` |
 

@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { supabase } from "../lib/clients.js";
-import { requireAuth } from "../lib/auth.js";
-import { validate, referralTrackSchema } from "../lib/validation.js";
+import { supabase } from "../_lib/clients.js";
+import { requireAuth } from "../_lib/auth.js";
+import { validate, referralTrackSchema } from "../_lib/validation.js";
 
 const router = Router();
 

@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { genai } from "../lib/clients.js";
-import { requireAuth } from "../lib/auth.js";
-import { validate, extractBillSchema, insightsSchema } from "../lib/validation.js";
-import { extractBillFromStorage, generateInsights } from "../lib/ai.js";
+import { genai } from "../_lib/clients.js";
+import { requireAuth } from "../_lib/auth.js";
+import { validate, extractBillSchema, insightsSchema } from "../_lib/validation.js";
+import { extractBillFromStorage, generateInsights } from "../_lib/ai.js";
 
 const router = Router();
 
