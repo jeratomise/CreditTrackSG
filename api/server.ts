@@ -18,7 +18,6 @@ import remindersRouter from "./routes/reminders.js";
 import aiRouter from "./routes/ai.js";
 import triggersRouter from "./routes/triggers.js";
 import referralsRouter from "./routes/referrals.js";
-import adminRouter from "./routes/admin.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -49,7 +48,6 @@ app.use(remindersRouter);
 app.use(aiRouter);
 app.use(triggersRouter);
 app.use(referralsRouter);
-app.use(adminRouter);
 
 // Re-exported so the local dev server (server.ts) can schedule them in-process.
 // In production these run via Vercel Cron hitting /api/trigger-*.
