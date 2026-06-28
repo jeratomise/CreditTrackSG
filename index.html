@@ -1,27 +1,55 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CreditTrack | EliteX.CC</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#15303d" />
+    <title>CreditTrack · Track every card. Earn every mile.</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
         theme: {
           extend: {
             fontFamily: {
-              sans: ['Inter', 'sans-serif'],
+              sans: ['"Bricolage Grotesque"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+              mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
             },
             colors: {
-              primary: '#4F46E5',
-              secondary: '#10B981',
-              danger: '#EF4444',
-              warning: '#F59E0B',
-              dark: '#111827',
-              paper: '#FFFFFF',
-            }
+              // Brass + Marine palette — the only working colours beyond neutrals
+              marine: {
+                950: '#0a1820',
+                900: '#0e2330',
+                800: '#15303d', // page bg
+                700: '#1c3d4d', // lifted surface
+                600: '#244e62',
+                500: '#2f627a',
+              },
+              brass: {
+                300: '#d9c190',
+                400: '#d6b277',
+                500: '#c9a157', // primary accent
+                600: '#a98748',
+                700: '#876a37',
+                800: '#5f4b25',
+              },
+              ink: {
+                DEFAULT: '#f4ead7',  // primary text on marine
+                soft:     '#d9cba8',  // secondary text
+                mute:     '#8a8474',  // tertiary / borders
+              },
+              // Semantic aliases used across the app
+              primary: '#c9a157',  // brass
+              danger:  '#c0524a',
+              warning: '#d4a849',
+              dark:    '#0e2330',
+              paper:   '#15303d',
+            },
+            letterSpacing: {
+              'tight-display': '-0.03em',
+            },
           }
         }
       }
@@ -42,7 +70,7 @@
 }
 </script>
 </head>
-  <body class="bg-gray-50 text-gray-900 antialiased">
+  <body class="bg-marine-800 text-ink antialiased font-sans selection:bg-brass-500 selection:text-marine-900">
     <div id="root"></div>
     <!-- Entry point for Vite build -->
     <script type="module" src="/index.tsx"></script>

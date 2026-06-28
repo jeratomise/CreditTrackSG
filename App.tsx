@@ -216,56 +216,56 @@ const App: React.FC = () => {
             </button>
 
             {isAvatarMenuOpen && (
-              <div className="absolute right-0 top-10 bg-white border border-gray-200 rounded-xl shadow-xl w-56 z-50 overflow-hidden">
-                <div className="p-4 border-b border-gray-100 bg-indigo-50/50">
-                  <p className="text-sm font-semibold text-gray-900 truncate">{user.name}</p>
-                  <p className="text-xs text-gray-500 truncate">{user.email}</p>
-                  <div className="flex gap-1 mt-1 flex-wrap">
+              <div className="absolute right-0 top-12 w-64 z-50 overflow-hidden bg-marine-800 border border-brass-500/20">
+                <div className="px-4 py-3 border-b border-brass-500/15">
+                  <p className="text-sm text-ink truncate">{user.name}</p>
+                  <p className="text-xs text-ink-mute truncate">{user.email}</p>
+                  <div className="flex gap-2 mt-2 flex-wrap font-mono text-[10px] uppercase tracking-[0.14em]">
                     {user.role === 'admin' && (
-                      <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-semibold">ADMIN</span>
+                      <span className="text-brass-400">Admin</span>
                     )}
                     {user.role === 'pro' && (
-                      <span className="text-[10px] bg-gradient-to-r from-amber-400 to-yellow-300 text-amber-900 px-1.5 py-0.5 rounded font-bold">⭐ PRO</span>
+                      <span className="text-brass-400">Pro</span>
                     )}
                     {user.role === 'user' && (
-                      <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-semibold">FREE</span>
+                      <span className="text-ink-mute">Free</span>
                     )}
                   </div>
                 </div>
                 <div className="p-2">
-                  {user.role === 'user' && (
-                    <button
-                      onClick={() => { setView('settings'); setIsAvatarMenuOpen(false); }}
-                      className="w-full flex items-center gap-2 px-3 py-2.5 mb-1 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white text-sm font-bold rounded-lg transition-colors"
-                    >
-                      <Sparkles className="w-4 h-4" />
-                      Upgrade to Pro
-                      <ChevronRight className="w-3 h-3 ml-auto opacity-70" />
-                    </button>
-                  )}
                   {user.role === 'admin' && (
                     <button
                       onClick={() => { setView('admin'); setIsAvatarMenuOpen(false); }}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                      className="w-full flex items-center gap-2 px-3 py-3 mb-1 bg-brass-500 text-marine-900 text-sm font-medium hover:bg-brass-400 transition-colors duration-150 min-h-[48px]"
                     >
-                      <LockKeyhole className="w-4 h-4 text-indigo-500" />
+                      <LockKeyhole className="w-4 h-4" strokeWidth={1.5} />
                       Admin Portal
-                      <ChevronRight className="w-3 h-3 ml-auto text-gray-400" />
+                      <ChevronRight className="w-3 h-3 ml-auto opacity-70" strokeWidth={1.5} />
+                    </button>
+                  )}
+                  {user.role === 'user' && (
+                    <button
+                      onClick={() => { setView('settings'); setIsAvatarMenuOpen(false); }}
+                      className="w-full flex items-center gap-2 px-3 py-3 mb-1 bg-brass-500 text-marine-900 text-sm font-medium hover:bg-brass-400 transition-colors duration-150 min-h-[48px]"
+                    >
+                      <Sparkles className="w-4 h-4" strokeWidth={1.5} />
+                      Upgrade to Pro
+                      <ChevronRight className="w-3 h-3 ml-auto opacity-70" strokeWidth={1.5} />
                     </button>
                   )}
                   <button
                     onClick={() => { setView('referral'); setIsAvatarMenuOpen(false); }}
-                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-ink-soft hover:bg-marine-700 transition-colors duration-150 min-h-[48px]"
                   >
-                    <Share2 className="w-4 h-4 text-amber-500" />
+                    <Share2 className="w-4 h-4 text-brass-400" strokeWidth={1.5} />
                     Referral Program
-                    <ChevronRight className="w-3 h-3 ml-auto text-gray-400" />
+                    <ChevronRight className="w-3 h-3 ml-auto text-ink-mute" strokeWidth={1.5} />
                   </button>
                   <button
                     onClick={() => { logout(); setIsAvatarMenuOpen(false); }}
-                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-red-500 hover:bg-red-50 rounded-lg transition-colors mt-1"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-ink-soft hover:bg-marine-700 transition-colors duration-150 min-h-[48px] border-t border-brass-500/10 mt-1"
                   >
-                    <LogOut className="w-4 h-4" />
+                    <LogOut className="w-4 h-4" strokeWidth={1.5} />
                     Sign Out
                   </button>
                 </div>
