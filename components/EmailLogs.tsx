@@ -38,14 +38,14 @@ export const EmailLogs: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+        <Loader2 className="w-6 h-6 text-brass-400 animate-spin" strokeWidth={1.5} />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-8 text-center text-red-500 bg-red-50 rounded-xl">
+      <div className="p-6 text-center text-sm text-danger bg-marine-900 border border-danger/30">
         {error}
       </div>
     );
@@ -63,62 +63,93 @@ export const EmailLogs: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto animate-fade-in pb-12">
-      <header className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <Mail className="w-6 h-6 text-indigo-600" />
-              System Email Logs
-          </h1>
-          <p className="text-gray-500">A history of automated bill reminders sent to {user?.email}.</p>
-        </div>
+      <header className="mb-8">
+        <h1 className="text-2xl font-medium tracking-tight-display text-ink flex items-center gap-2.5">
+            <Mail className="w-5 h-5 text-brass-400" strokeWidth={1.5} />
+            Email log
+        </h1>
+        <p className="text-ink-mute text-sm mt-1 truncate">Reminders sent to {user?.email}.</p>
       </header>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        {logs.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            No email logs found. Wait for the daily reminder or trigger a test.
+      {logs.length === 0 ? (
+        <div className="bg-marine-900 border border-brass-500/15 p-8 text-center text-sm text-ink-mute">
+          Nothing sent yet. Reminders appear here once a bill is due.
+        </div>
+      ) : (
+        <>
+          {/* Mobile: stacked cards */}
+          <div className="sm:hidden space-y-3">
+            {logs.map(log => (
+              <div key={log.id} className="bg-marine-900 border border-brass-500/15 p-4">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-brass-400">
+                    {log.type.replace('_', ' ')}
+                  </span>
+                  <span className="font-mono text-[10px] tabular-nums text-ink-mute">
+                    {formatDateTime(log.sent_at)}
+                  </span>
+                </div>
+                <p className="text-sm text-ink-soft truncate">{log.email}</p>
+                <div className="flex items-center justify-between gap-3 mt-2">
+                  <span className="text-xs text-ink-mute">
+                    Bills: <span className="font-mono tabular-nums text-ink">{log.details?.bills_count || 0}</span>
+                  </span>
+                  {log.details?.preview_url && (
+                    <a
+                      href={log.details.preview_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-brass-400 hover:text-brass-300 flex items-center gap-1 transition-colors duration-150 min-h-[40px]"
+                    >
+                      Preview <ExternalLink className="w-3 h-3" strokeWidth={1.5} />
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-gray-600">
-              <thead className="bg-gray-50 text-xs uppercase font-semibold text-gray-500">
+
+          {/* Desktop: table */}
+          <div className="hidden sm:block bg-marine-900 border border-brass-500/15 overflow-x-auto">
+            <table className="w-full text-left text-sm text-ink-soft">
+              <thead className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-mute border-b border-brass-500/15">
                 <tr>
-                  <th className="px-6 py-4">Date Sent</th>
-                  <th className="px-6 py-4">Type</th>
-                  <th className="px-6 py-4">Recipient</th>
-                  <th className="px-6 py-4">Details</th>
+                  <th className="px-5 py-3 font-normal">Sent</th>
+                  <th className="px-5 py-3 font-normal">Type</th>
+                  <th className="px-5 py-3 font-normal">Recipient</th>
+                  <th className="px-5 py-3 font-normal">Details</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-brass-500/10">
                 {logs.map(log => (
-                  <tr key={log.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                  <tr key={log.id} className="hover:bg-marine-800 transition-colors duration-150">
+                    <td className="px-5 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-gray-400" />
-                        {formatDateTime(log.sent_at)}
+                        <Calendar className="w-3.5 h-3.5 text-ink-mute" strokeWidth={1.5} />
+                        <span className="font-mono text-xs tabular-nums">{formatDateTime(log.sent_at)}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="px-2 py-1 rounded text-xs font-medium uppercase bg-indigo-100 text-indigo-700">
+                    <td className="px-5 py-4">
+                      <span className="inline-flex font-mono text-[10px] uppercase tracking-[0.14em] px-2 py-1 border border-brass-500/40 text-brass-400 whitespace-nowrap">
                         {log.type.replace('_', ' ')}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-5 py-4">
                       {log.email}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-5 py-4">
                       <div className="flex flex-col gap-1">
-                        <span className="text-xs text-gray-500">
-                          Bills included: <strong className="text-gray-900">{log.details?.bills_count || 0}</strong>
+                        <span className="text-xs text-ink-mute">
+                          Bills: <span className="font-mono tabular-nums text-ink">{log.details?.bills_count || 0}</span>
                         </span>
                         {log.details?.preview_url && (
-                          <a 
-                            href={log.details.preview_url} 
-                            target="_blank" 
+                          <a
+                            href={log.details.preview_url}
+                            target="_blank"
                             rel="noreferrer"
-                            className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                            className="text-xs text-brass-400 hover:text-brass-300 flex items-center gap-1 transition-colors duration-150"
                           >
-                            View Email Preview <ExternalLink className="w-3 h-3" />
+                            Preview <ExternalLink className="w-3 h-3" strokeWidth={1.5} />
                           </a>
                         )}
                       </div>
@@ -128,8 +159,8 @@ export const EmailLogs: React.FC = () => {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 };

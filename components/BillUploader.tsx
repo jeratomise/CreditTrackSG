@@ -10,6 +10,9 @@ interface BillUploaderProps {
   onBillProcessed: (bills: Bill[]) => void;
 }
 
+const UPLOAD_TIMEOUT_MS = 120000;
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
 export const BillUploader: React.FC<BillUploaderProps> = ({ onBillProcessed }) => {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -19,7 +22,7 @@ export const BillUploader: React.FC<BillUploaderProps> = ({ onBillProcessed }) =
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // Helper to prevent infinite hanging - Increased to 120s for larger/complex PDF files
-  const uploadWithTimeout = async (promise: Promise<any>, ms: number = 120000) => {
+  const uploadWithTimeout = async (promise: Promise<any>, ms: number = UPLOAD_TIMEOUT_MS) => {
     let timeoutId: ReturnType<typeof setTimeout>;
     const timeoutPromise = new Promise((_, reject) => {
       timeoutId = setTimeout(() => reject(new Error("Upload timed out (120s). The file is large or AI processing is taking longer than expected.")), ms);
@@ -36,8 +39,7 @@ export const BillUploader: React.FC<BillUploaderProps> = ({ onBillProcessed }) =
   const processFile = async (file: File): Promise<Bill[]> => {
      if (!user) throw new Error("User not authenticated");
 
-     // File Size Check (10MB Limit)
-     if (file.size > 10 * 1024 * 1024) {
+     if (file.size > MAX_FILE_BYTES) {
          throw new Error(`File ${file.name} exceeds 10MB limit.`);
      }
 
@@ -111,7 +113,7 @@ export const BillUploader: React.FC<BillUploaderProps> = ({ onBillProcessed }) =
     setIsLoading(true);
     setErrors([]);
     setUploadStatus(`Preparing to process ${files.length} file(s)...`);
-    
+
     const allNewBills: Bill[] = [];
     const newErrors: string[] = [];
     const fileArray: File[] = Array.from(files);
@@ -120,7 +122,7 @@ export const BillUploader: React.FC<BillUploaderProps> = ({ onBillProcessed }) =
         // Run all file processes in parallel
         const results = await Promise.allSettled(fileArray.map(file => processFile(file)));
 
-        results.forEach((result, index) => {
+        results.forEach((result) => {
             if (result.status === 'fulfilled') {
                 allNewBills.push(...result.value);
             } else {
@@ -130,8 +132,7 @@ export const BillUploader: React.FC<BillUploaderProps> = ({ onBillProcessed }) =
 
         if (allNewBills.length > 0) {
             onBillProcessed(allNewBills);
-            const successMsg = `Successfully processed ${allNewBills.length} bills from ${fileArray.length - newErrors.length} valid files.`;
-            setUploadStatus(successMsg);
+            setUploadStatus(`Added ${allNewBills.length} bill(s) from ${fileArray.length - newErrors.length} file(s).`);
         } else {
             setUploadStatus(null);
         }
@@ -147,34 +148,47 @@ export const BillUploader: React.FC<BillUploaderProps> = ({ onBillProcessed }) =
     }
   };
 
+  const openFilePicker = () => {
+    if (!isLoading) fileInputRef.current?.click();
+  };
+
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-      <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-        <Upload className="w-5 h-5 text-primary" />
-        Upload Bills
+    <div className="bg-marine-900 border border-brass-500/15 p-5 sm:p-6">
+      <h2 className="text-base font-medium text-ink mb-4 flex items-center gap-2.5">
+        <Upload className="w-4 h-4 text-brass-400" strokeWidth={1.5} />
+        Upload bills
       </h2>
-      
-      <div 
-        className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors ${
-          isLoading ? 'border-primary bg-indigo-50' : 'border-gray-300 hover:border-primary hover:bg-gray-50'
+
+      <div
+        role="button"
+        tabIndex={isLoading ? -1 : 0}
+        aria-label="Choose a PDF or image to upload"
+        className={`border border-dashed p-8 sm:p-12 text-center transition-colors duration-150 ${
+          isLoading
+            ? 'border-brass-500 bg-marine-800 cursor-wait'
+            : 'border-brass-500/40 hover:border-brass-500 hover:bg-marine-800 cursor-pointer'
         }`}
-        onClick={() => !isLoading && fileInputRef.current?.click()}
+        onClick={openFilePicker}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openFilePicker();
+          }
+        }}
       >
         {isLoading ? (
           <div className="flex flex-col items-center gap-3">
-            <Loader2 className="w-8 h-8 text-primary animate-spin" />
-            <p className="text-sm text-gray-600 font-medium">
-                {uploadStatus || "AI is analyzing & saving to cloud..."}
+            <Loader2 className="w-6 h-6 text-brass-400 animate-spin" strokeWidth={1.5} />
+            <p className="text-sm text-ink-soft">
+                {uploadStatus || "Reading your statement…"}
             </p>
-            <p className="text-xs text-gray-400">Please wait while we extract the data.</p>
+            <p className="text-xs text-ink-mute">This can take up to two minutes for a large PDF.</p>
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-3 cursor-pointer">
-            <div className="bg-indigo-100 p-4 rounded-full">
-               <FileText className="w-8 h-8 text-primary" />
-            </div>
-            <p className="text-sm text-gray-600 font-medium">Click to upload PDF or Images</p>
-            <p className="text-xs text-gray-400">Supports PDF, JPG, PNG (Max 10MB)</p>
+          <div className="flex flex-col items-center gap-3">
+            <FileText className="w-8 h-8 text-brass-500/60" strokeWidth={1.5} />
+            <p className="text-sm text-ink-soft">Tap to choose a PDF or image</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-mute">PDF · JPG · PNG · max 10MB</p>
           </div>
         )}
         <input
@@ -200,29 +214,29 @@ export const BillUploader: React.FC<BillUploaderProps> = ({ onBillProcessed }) =
       {!isLoading && (
         <button
           onClick={() => cameraInputRef.current?.click()}
-          className="sm:hidden w-full mt-3 flex items-center justify-center gap-2 py-3 border-2 border-dashed border-indigo-300 rounded-xl text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors font-medium text-sm"
+          className="sm:hidden w-full mt-3 flex items-center justify-center gap-2 py-3 bg-brass-500 text-marine-900 font-medium text-sm hover:bg-brass-400 transition-colors duration-150 min-h-[48px]"
         >
-          <Camera className="w-5 h-5" />
-          Take Photo of Bill
+          <Camera className="w-5 h-5" strokeWidth={1.5} />
+          Take a photo
         </button>
       )}
 
       {!isLoading && uploadStatus && (
-          <div className="mt-4 p-3 bg-green-50 text-green-700 text-sm rounded-lg flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 shrink-0" />
+          <div className="mt-4 p-3 bg-marine-800 border border-brass-500/30 text-brass-300 text-sm flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 shrink-0" strokeWidth={1.5} />
             {uploadStatus}
           </div>
       )}
 
       {errors.length > 0 && (
-        <div className="mt-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">
-            <div className="flex items-center gap-2 font-medium mb-2">
-                <AlertCircle className="w-4 h-4" />
-                Errors encountered:
+        <div className="mt-4 p-3 bg-marine-800 border border-danger/40 text-danger text-sm">
+            <div className="flex items-center gap-2 mb-2">
+                <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+                Could not process:
             </div>
-            <ul className="list-disc list-inside space-y-1">
+            <ul className="space-y-1 pl-6 list-disc">
                 {errors.map((err, i) => (
-                    <li key={i} className="text-xs opacity-90">{err}</li>
+                    <li key={i} className="text-xs">{err}</li>
                 ))}
             </ul>
         </div>
