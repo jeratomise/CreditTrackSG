@@ -6,6 +6,8 @@ import { AlertTriangle, CheckCircle, Clock, Plus, TrendingUp, Pencil, FileText, 
 import { PaymentModal } from './PaymentModal';
 import { EditBillModal } from './EditBillModal';
 import { AlertModal } from './AlertModal';
+import { Modal } from './Modal';
+import { ghostButtonClass } from './formStyles';
 import { dbService } from '../services/dbService';
 
 interface DashboardProps {
@@ -668,34 +670,30 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
       />
 
       {/* Delete Confirmation Modal */}
-      {billToDelete && (
-        <div className="fixed inset-0 bg-marine-950/80 flex items-center justify-center z-50 animate-fade-in p-4">
-          <div className="bg-marine-900 border border-brass-500/25 p-6 w-full max-w-sm animate-scale-in">
-            <div className="flex items-center gap-3 mb-4">
-              <AlertTriangle className="w-5 h-5 text-danger" strokeWidth={1.5} />
-              <h2 className="text-lg font-medium text-ink">Delete bill</h2>
-            </div>
-            <p className="text-sm text-ink-soft mb-6">This cannot be undone.</p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setBillToDelete(null)}
-                className="px-4 py-2.5 text-sm text-ink-soft hover:text-ink font-medium transition-colors duration-150 min-h-[44px]"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  onDeleteBill(billToDelete);
-                  setBillToDelete(null);
-                }}
-                className="px-5 py-2.5 bg-danger text-ink font-medium text-sm hover:opacity-90 transition-opacity duration-150 min-h-[44px]"
-              >
-                Delete
-              </button>
-            </div>
+      <Modal
+        isOpen={!!billToDelete}
+        onClose={() => setBillToDelete(null)}
+        title="Delete bill"
+        icon={<AlertTriangle className="w-4 h-4 text-danger shrink-0" strokeWidth={1.5} />}
+      >
+        <div className="p-6">
+          <p className="text-sm text-ink-soft mb-6">This cannot be undone.</p>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
+            <button onClick={() => setBillToDelete(null)} className={ghostButtonClass}>
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                if (billToDelete) onDeleteBill(billToDelete);
+                setBillToDelete(null);
+              }}
+              className="flex items-center justify-center gap-2 bg-danger text-ink px-6 py-3 font-medium text-sm hover:opacity-90 transition-opacity duration-150 min-h-[48px]"
+            >
+              Delete
+            </button>
           </div>
         </div>
-      )}
+      </Modal>
 
       {/* Alert Modal */}
       <AlertModal

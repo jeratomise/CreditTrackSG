@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import { User, SystemConfig } from '../types';
 import { Save, Trash2, Power, LayoutTemplate, Plus, LockKeyhole } from 'lucide-react';
+import { fieldClass, labelClass, primaryButtonClass } from './formStyles';
 
 const SAVE_STATUS_TIMEOUT_MS = 3000;
 
@@ -27,9 +28,6 @@ const StatusChip: React.FC<{ tone: 'brass' | 'danger' | 'warning' | 'mute'; chil
     </span>
   );
 };
-
-const fieldClass =
-  'w-full px-3 py-2.5 bg-marine-800 border border-brass-500/20 text-ink text-sm placeholder:text-ink-mute focus:border-brass-500 focus:outline-none transition-colors duration-150';
 
 export const AdminPanel: React.FC = () => {
   const { user, getAllUsers, toggleUserStatus, updateUserRole, systemConfig, updateSystemConfig } = useAuth();
@@ -310,7 +308,7 @@ export const AdminPanel: React.FC = () => {
 
                   <div className="space-y-4">
                       <div>
-                          <label className="block font-mono text-[10px] uppercase tracking-[0.14em] text-ink-mute mb-2">Hero title</label>
+                          <label className={labelClass}>Hero title</label>
                           <textarea
                               rows={2}
                               className={fieldClass}
@@ -322,7 +320,7 @@ export const AdminPanel: React.FC = () => {
                           />
                       </div>
                       <div>
-                          <label className="block font-mono text-[10px] uppercase tracking-[0.14em] text-ink-mute mb-2">Hero subtitle</label>
+                          <label className={labelClass}>Hero subtitle</label>
                           <textarea
                               rows={3}
                               className={fieldClass}
@@ -335,7 +333,7 @@ export const AdminPanel: React.FC = () => {
                       </div>
 
                       <div>
-                          <label className="block font-mono text-[10px] uppercase tracking-[0.14em] text-ink-mute mb-2">Feature bullets</label>
+                          <label className={labelClass}>Feature bullets</label>
                           <div className="space-y-2">
                               {cmsForm.landingPage.bullets.map((bullet, idx) => (
                                   <div key={idx} className="flex gap-2">
@@ -370,7 +368,7 @@ export const AdminPanel: React.FC = () => {
             <div className="flex justify-end">
                 <button
                     type="submit"
-                    className="flex items-center gap-2 bg-brass-500 text-marine-900 px-6 py-3 hover:bg-brass-400 font-medium text-sm transition-colors duration-150 min-h-[48px]"
+                    className={primaryButtonClass}
                 >
                     <Save className="w-4 h-4" strokeWidth={1.5} />
                     Save configuration
