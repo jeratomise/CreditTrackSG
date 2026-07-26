@@ -21,10 +21,12 @@ interface AuthContextType {
 
 const DEFAULT_CONFIG: SystemConfig = {
   allowSignups: true,
+  // Fallback only — used until the row loads, or if it cannot be read.
+  // Keep in step with the hardcoded fallbacks in LandingPage.
   landingPage: {
-    heroTitle: "Financial Clarity.\nFor the Elite.",
-    heroSubtitle: "CreditTrack by EliteX.CC: The AI-powered bill tracker designed for Singapore's top tier.",
-    bullets: ["Auto-extract data", "Miles Optimization Strategy", "Consolidated Wealth View"]
+    heroTitle: "Track every card.\nEarn every mile.",
+    heroSubtitle: "Built for the Singapore miles obsessive who treats their wallet like a portfolio. Statement in, strategy out, reminders handled.",
+    bullets: []
   }
 };
 

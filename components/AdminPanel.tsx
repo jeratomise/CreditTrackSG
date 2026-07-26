@@ -305,6 +305,10 @@ export const AdminPanel: React.FC = () => {
                       <LayoutTemplate className="w-4 h-4 text-brass-400" strokeWidth={1.5} />
                       Landing page content
                   </h2>
+                  <p className="text-xs text-ink-mute -mt-2 mb-4">
+                      These render in the hero of the public landing page. Put each headline
+                      line on its own row; leave bullets empty to hide them.
+                  </p>
 
                   <div className="space-y-4">
                       <div>

@@ -2,6 +2,9 @@
 import { supabase } from '../lib/supabaseClient';
 import { Bill, Transaction, SystemConfig, PaymentDetails, User } from '../types';
 
+/** `system_config` holds a single row; every read and write targets it by id. */
+const SYSTEM_CONFIG_ROW_ID = 1;
+
 export const dbService = {
   // --- Bills ---
   async getBills(userId: string): Promise<Bill[]> {
@@ -167,25 +170,31 @@ export const dbService = {
 
   // --- System Config ---
   async getSystemConfig(): Promise<SystemConfig | null> {
+    // Target the singleton row explicitly: a bare .single() throws if the table
+    // ever holds anything other than exactly one row.
     const { data, error } = await supabase
       .from('system_config')
       .select('*')
-      .single();
+      .eq('id', SYSTEM_CONFIG_ROW_ID)
+      .maybeSingle();
 
-    if (error) return null;
+    if (error || !data) return null;
 
     return {
-      allowSignups: data.allow_signups,
+      allowSignups: data.allow_signups ?? true,
       landingPage: {
-        heroTitle: data.hero_title,
-        heroSubtitle: data.hero_subtitle,
-        bullets: data.bullets || []
+        heroTitle: data.hero_title ?? '',
+        heroSubtitle: data.hero_subtitle ?? '',
+        bullets: data.bullets ?? []
       }
     };
   },
 
   async updateSystemConfig(config: SystemConfig): Promise<void> {
-    const { error } = await supabase
+    // `.select()` makes the write report which rows it actually changed. Without
+    // it, an update matching no row — missing row, or RLS refusing a non-admin —
+    // resolves without error and the admin is told the save succeeded.
+    const { data, error } = await supabase
       .from('system_config')
       .update({
         allow_signups: config.allowSignups,
@@ -193,9 +202,13 @@ export const dbService = {
         hero_subtitle: config.landingPage.heroSubtitle,
         bullets: config.landingPage.bullets
       })
-      .eq('id', 1);
+      .eq('id', SYSTEM_CONFIG_ROW_ID)
+      .select('id');
 
     if (error) throw error;
+    if (!data || data.length === 0) {
+      throw new Error('Nothing was saved — the config row is missing, or your account lacks admin rights.');
+    }
   },
 
   // --- AI Insights (Supabase-backed cache) ---

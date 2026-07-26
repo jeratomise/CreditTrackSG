@@ -43,6 +43,21 @@ const PRICING_ROWS = [
   { label: 'Support',               free: '—',             pro: 'Priority' },
 ] as const;
 
+const FALLBACK_HERO_TITLE = ['Track every card.', 'Earn every mile.'];
+const FALLBACK_HERO_SUBTITLE =
+  'Built for the Singapore miles obsessive who treats their wallet like a portfolio. Statement in, strategy out, reminders handled.';
+
+/**
+ * Split an admin-authored headline into lines.
+ * Accepts real newlines and the literal two-character "\n" sequence, since the
+ * CMS textarea has stored both over time.
+ */
+const toLines = (value: string | undefined): string[] =>
+  (value ?? '')
+    .split(/\\n|\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+
 /** Squared-off pill used for inline status / labels — replaces the rounded glass variant. */
 const Pill: React.FC<{ children: React.ReactNode; tone?: 'brass' | 'ink' }> = ({ children, tone = 'ink' }) => (
   <span
@@ -326,6 +341,13 @@ export const LandingPage: React.FC = () => {
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
   const [showProPage, setShowProPage] = useState(false);
 
+  // Hero copy is admin-editable from the Front page tab of the Admin Portal.
+  const cms = systemConfig.landingPage;
+  const heroTitleLines = toLines(cms?.heroTitle);
+  const heroTitle = heroTitleLines.length > 0 ? heroTitleLines : FALLBACK_HERO_TITLE;
+  const heroSubtitle = cms?.heroSubtitle?.trim() || FALLBACK_HERO_SUBTITLE;
+  const heroBullets = (cms?.bullets ?? []).map(b => b.trim()).filter(Boolean);
+
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const refCode = params.get('ref');
@@ -501,12 +523,16 @@ export const LandingPage: React.FC = () => {
           <Pill tone="brass">Mobile-first · Singapore</Pill>
 
           <h1 className="mt-5 text-[clamp(2.5rem,6.5vw+0.5rem,4.5rem)] font-medium tracking-tight-display leading-[1.02] text-ink max-w-[16ch]">
-            Track every card.<br />
-            Earn every mile.
+            {heroTitle.map((line, i) => (
+              <React.Fragment key={`${line}-${i}`}>
+                {line}
+                {i < heroTitle.length - 1 && <br />}
+              </React.Fragment>
+            ))}
           </h1>
 
           <p className="mt-6 text-[clamp(1rem,1.5vw,1.125rem)] text-ink-soft leading-relaxed max-w-prose">
-            Built for the Singapore miles obsessive who treats their wallet like a portfolio. Statement in, strategy out, reminders handled.
+            {heroSubtitle}
           </p>
 
           <div className="mt-8 flex flex-col sm:flex-row sm:items-center gap-3">
@@ -523,6 +549,20 @@ export const LandingPage: React.FC = () => {
               See how it works ↓
             </a>
           </div>
+
+          {/* Admin-editable bullets. Rendered only when the CMS has some. */}
+          {heroBullets.length > 0 && (
+            <ul className="mt-10 grid gap-x-10 gap-y-2.5 sm:grid-cols-2 max-w-3xl">
+              {heroBullets.map((bullet, i) => (
+                <li key={`${bullet}-${i}`} className="flex items-baseline gap-3 text-sm text-ink-soft">
+                  <span className="font-mono text-[10px] tabular-nums text-brass-400 shrink-0">
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+                  <span>{bullet}</span>
+                </li>
+              ))}
+            </ul>
+          )}
 
           {/* Trust strip — supported banks, monospace, hairline rule */}
           <div className="mt-14 pt-8 border-t border-brass-500/10">
