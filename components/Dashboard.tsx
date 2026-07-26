@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Bill, PaymentDetails } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer, Tooltip } from 'recharts';
-import { AlertTriangle, CheckCircle, Clock, Plus, Filter, TrendingUp, Pencil, FileText, ExternalLink, Calendar, Trash2 , Globe } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, Plus, TrendingUp, Pencil, FileText, Calendar, Trash2, Globe } from 'lucide-react';
 import { PaymentModal } from './PaymentModal';
 import { EditBillModal } from './EditBillModal';
 import { AlertModal } from './AlertModal';
@@ -16,18 +16,31 @@ interface DashboardProps {
   onOpenManualModal?: () => void;
 }
 
-const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
-const BANK_COLORS: Record<string, string> = {
-    'DBS': '#ef4444', // Red
-    'Citibank': '#0ea5e9', // Light Blue
-    'UOB': '#0f172a', // Dark Navy
-    'HSBC': '#db2777', // Pink
-    'OCBC': '#f97316', // Orange
-    'Standard Chartered': '#16a34a', // Green
-    'AMEX': '#8b5cf6', // Purple
-    'Unknown': '#9ca3af' // Gray
-};
-const DEFAULT_BANK_COLORS = ['#6366f1', '#14b8a6', '#f59e0b', '#ec4899', '#8b5cf6', '#84cc16', '#06b6d4', '#f43f5e'];
+const MONTH_FILTER_KEY = 'credittrack_month_filter';
+const DUE_SOON_DAYS = 3;
+const DUE_WARNING_DAYS = 7;
+
+/**
+ * Series colours are a brass→marine tonal ramp rather than a rainbow.
+ * The palette has exactly two working colours; categorical separation comes
+ * from tone, not hue.
+ */
+const SERIES_COLORS = [
+  '#c9a157', // brass-500
+  '#8a8474', // ink-mute
+  '#d9c190', // brass-300
+  '#2f627a', // marine-500
+  '#876a37', // brass-700
+  '#d9cba8', // ink-soft
+  '#244e62', // marine-600
+  '#d4a849', // warning
+];
+
+const CHART_GRID = '#1c3d4d';   // marine-700
+const CHART_AXIS = '#8a8474';   // ink-mute
+
+const money = (n: number): string =>
+  n.toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAddBill, onDeleteBill, onOpenManualModal }) => {
   const [selectedBillForPayment, setSelectedBillForPayment] = useState<Bill | null>(null);
@@ -36,7 +49,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAdd
 const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
   if (typeof window === 'undefined') return 'ALL';
   try {
-    const cached = localStorage.getItem('credittrack_month_filter');
+    const cached = localStorage.getItem(MONTH_FILTER_KEY);
     if (cached) return cached;
   } catch {}
   return 'ALL';
@@ -44,8 +57,8 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
   const [billToDelete, setBillToDelete] = useState<string | null>(null);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
 
-  const totalDue = useMemo(() => 
-    bills.filter(b => !b.isPaid).reduce((acc, b) => acc + b.totalAmount, 0), 
+  const totalDue = useMemo(() =>
+    bills.filter(b => !b.isPaid).reduce((acc, b) => acc + b.totalAmount, 0),
   [bills]);
 
   // ------------------------------------------------------------------
@@ -61,7 +74,7 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
         grandTotal += amount;
       });
     });
-    
+
     // Sort and limit to top 5, group rest as other
     const sorted = Object.keys(categories)
         .map(key => ({ name: key, value: categories[key], percentage: (categories[key] / (grandTotal || 1)) * 100 }))
@@ -81,7 +94,7 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
         // Use Statement Date for spend allocation, fallback to Due Date
         const dateStr = bill.statementDate || bill.dueDate;
         const dateObj = new Date(dateStr);
-        
+
         // Key format: YYYY-MM for sorting/grouping
         const monthKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
         // Display label: MMM YYYY
@@ -108,7 +121,7 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
     });
 
     // Convert to array and sort by date
-    const dataArray = Object.values(monthlyData).sort((a: any, b: any) => 
+    const dataArray = Object.values(monthlyData).sort((a: any, b: any) =>
         a._sortKey.localeCompare(b._sortKey)
     );
 
@@ -136,11 +149,11 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
   useEffect(() => {
     if (availableMonths.length === 0) return;
     try {
-      const saved = localStorage.getItem('credittrack_month_filter');
+      const saved = localStorage.getItem(MONTH_FILTER_KEY);
       // If saved filter is no longer valid (e.g. month no longer has bills), reset to latest
       if (saved && saved !== 'ALL' && !availableMonths.includes(saved)) {
         setSelectedMonthFilter(availableMonths[0]);
-        localStorage.setItem('credittrack_month_filter', availableMonths[0]);
+        localStorage.setItem(MONTH_FILTER_KEY, availableMonths[0]);
         return;
       }
       if (saved && saved !== 'ALL') {
@@ -150,7 +163,7 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
       // No saved preference → default to latest month
       if (!saved || saved === 'ALL') {
         setSelectedMonthFilter(availableMonths[0]);
-        localStorage.setItem('credittrack_month_filter', availableMonths[0]);
+        localStorage.setItem(MONTH_FILTER_KEY, availableMonths[0]);
       }
     } catch {}
   }, [availableMonths]);
@@ -158,7 +171,7 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
   // Persist filter changes
   useEffect(() => {
     try {
-      localStorage.setItem('credittrack_month_filter', selectedMonthFilter);
+      localStorage.setItem(MONTH_FILTER_KEY, selectedMonthFilter);
     } catch {}
   }, [selectedMonthFilter]);
 
@@ -205,18 +218,18 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
       return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
-  const getUrgencyColor = (days: number) => {
-      if (days < 0) return 'text-red-600 bg-red-100'; // Overdue
-      if (days <= 3) return 'text-orange-600 bg-orange-100'; // Critical
-      if (days <= 7) return 'text-yellow-600 bg-yellow-100'; // Warning
-      return 'text-green-600 bg-green-100'; // Safe
+  const getUrgencyTone = (days: number) => {
+      if (days < 0) return 'text-danger border-danger/40';
+      if (days <= DUE_SOON_DAYS) return 'text-danger border-danger/40';
+      if (days <= DUE_WARNING_DAYS) return 'text-warning border-warning/40';
+      return 'text-ink-mute border-brass-500/25';
   };
 
   const getUrgencyLabel = (days: number) => {
-      if (days < 0) return `Overdue by ${Math.abs(days)} days`;
-      if (days === 0) return 'Due Today';
-      if (days === 1) return 'Due Tomorrow';
-      return `Due in ${days} days`;
+      if (days < 0) return `Overdue ${Math.abs(days)}d`;
+      if (days === 0) return 'Due today';
+      if (days === 1) return 'Due tomorrow';
+      return `${days}d left`;
   };
 
   const getMonthLabel = (yyyyMm: string) => {
@@ -236,74 +249,76 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
       }
   };
 
+  const monthChipClass = (active: boolean) =>
+    `px-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] whitespace-nowrap transition-colors duration-150 min-h-[40px] ${
+      active ? 'bg-brass-500 text-marine-900' : 'text-ink-mute hover:text-ink'
+    }`;
+
+  const iconButtonClass =
+    'w-10 h-10 flex items-center justify-center text-ink-mute hover:text-brass-400 transition-colors duration-150';
+
   return (
     <div className="space-y-6">
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Total Outstanding</p>
-              <h3 className="text-3xl font-bold text-gray-900 mt-1">${totalDue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
+        <div className="bg-marine-900 border border-brass-500/15 p-5">
+          <div className="flex justify-between items-start gap-3">
+            <div className="min-w-0">
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-mute">Outstanding</p>
+              <p className="font-mono text-2xl tabular-nums text-ink mt-2">${money(totalDue)}</p>
             </div>
-            <div className="bg-red-50 p-2.5 rounded-xl">
-              <AlertTriangle className="w-6 h-6 text-red-600" />
-            </div>
+            <AlertTriangle className="w-5 h-5 text-brass-400 shrink-0" strokeWidth={1.5} />
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Bills Due Soon</p>
-              <h3 className="text-3xl font-bold text-gray-900 mt-1">{upcomingBills.length}</h3>
+        <div className="bg-marine-900 border border-brass-500/15 p-5">
+          <div className="flex justify-between items-start gap-3">
+            <div className="min-w-0">
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-mute">Bills due</p>
+              <p className="font-mono text-2xl tabular-nums text-ink mt-2">{upcomingBills.length}</p>
             </div>
-            <div className="bg-yellow-50 p-2.5 rounded-xl">
-              <Clock className="w-6 h-6 text-yellow-600" />
-            </div>
+            <Clock className="w-5 h-5 text-brass-400 shrink-0" strokeWidth={1.5} />
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-           <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm text-gray-500 font-medium">Processed Bills</p>
-              <h3 className="text-3xl font-bold text-gray-900 mt-1">{bills.length}</h3>
+        <div className="bg-marine-900 border border-brass-500/15 p-5">
+          <div className="flex justify-between items-start gap-3">
+            <div className="min-w-0">
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-mute">Processed</p>
+              <p className="font-mono text-2xl tabular-nums text-ink mt-2">{bills.length}</p>
             </div>
-             <div className="bg-green-50 p-2.5 rounded-xl">
-              <CheckCircle className="w-6 h-6 text-green-600" />
-            </div>
+            <CheckCircle className="w-5 h-5 text-brass-400 shrink-0" strokeWidth={1.5} />
           </div>
         </div>
       </div>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
+
         {/* Upcoming List */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-96 flex flex-col">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-indigo-600" />
-              Upcoming Deadlines
-          </h3>
+        <div className="bg-marine-900 border border-brass-500/15 p-5 sm:p-6 h-96 flex flex-col">
+          <h2 className="text-base font-medium text-ink mb-4 flex items-center gap-2.5">
+              <Calendar className="w-4 h-4 text-brass-400" strokeWidth={1.5} />
+              Upcoming deadlines
+          </h2>
           {upcomingBills.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-                <CheckCircle className="w-12 h-12 mb-2 opacity-20" />
-                <p>All clear! No bills pending.</p>
+            <div className="flex-1 flex flex-col items-center justify-center text-ink-mute">
+                <CheckCircle className="w-8 h-8 mb-3 text-brass-500/40" strokeWidth={1.5} />
+                <p className="text-sm">Nothing pending.</p>
             </div>
           ) : (
-            <div className="overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+            <div className="overflow-y-auto space-y-2 pr-1 custom-scrollbar">
               {upcomingBills.map(bill => {
                   const daysLeft = getDaysRemaining(bill.dueDate);
                   return (
-                    <div key={bill.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 hover:border-primary/30 transition-all">
-                      <div className="flex flex-col">
-                        <p className="font-semibold text-gray-800 text-sm">{bill.bankName} • {bill.cardName}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">{formatDateForDisplay(bill.dueDate)}</p>
+                    <div key={bill.id} className="flex items-center justify-between gap-3 p-3 bg-marine-800 border border-brass-500/10 hover:border-brass-500/30 transition-colors duration-150">
+                      <div className="flex flex-col min-w-0">
+                        <p className="text-sm text-ink truncate">{bill.bankName} · {bill.cardName}</p>
+                        <p className="font-mono text-[10px] tabular-nums text-ink-mute mt-0.5">{formatDateForDisplay(bill.dueDate)}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold text-gray-900 text-sm">${bill.totalAmount.toFixed(2)}</p>
-                        <span className={`inline-block mt-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${getUrgencyColor(daysLeft)}`}>
+                      <div className="text-right shrink-0">
+                        <p className="font-mono text-sm tabular-nums text-ink">${money(bill.totalAmount)}</p>
+                        <span className={`inline-block mt-1 font-mono text-[9px] uppercase tracking-[0.12em] px-1.5 py-0.5 border ${getUrgencyTone(daysLeft)}`}>
                             {getUrgencyLabel(daysLeft)}
                         </span>
                       </div>
@@ -314,121 +329,114 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
           )}
         </div>
 
-        {/* Spend Breakdown - REPLACED PIE CHART WITH LIST */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-96 flex flex-col">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-indigo-600" />
-            Spend by Category
-          </h3>
-          
-          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+        {/* Spend Breakdown */}
+        <div className="bg-marine-900 border border-brass-500/15 p-5 sm:p-6 h-96 flex flex-col">
+          <h2 className="text-base font-medium text-ink mb-4 flex items-center gap-2.5">
+            <TrendingUp className="w-4 h-4 text-brass-400" strokeWidth={1.5} />
+            Spend by category
+          </h2>
+
+          <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
               {categoryData.data.length > 0 ? (
                   <div className="space-y-4">
                       {categoryData.data.map((cat, index) => (
-                          <div key={cat.name} className="group">
-                              <div className="flex justify-between items-end mb-1">
-                                  <span className="text-sm font-medium text-gray-700">{cat.name}</span>
-                                  <div className="text-right">
-                                      <span className="text-sm font-bold text-gray-900">${cat.value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-                                      <span className="text-xs text-gray-400 ml-2">({cat.percentage.toFixed(1)}%)</span>
+                          <div key={cat.name}>
+                              <div className="flex justify-between items-end mb-1.5 gap-3">
+                                  <span className="text-sm text-ink-soft truncate">{cat.name}</span>
+                                  <div className="text-right shrink-0">
+                                      <span className="font-mono text-sm tabular-nums text-ink">${money(cat.value)}</span>
+                                      <span className="font-mono text-[10px] tabular-nums text-ink-mute ml-2">{cat.percentage.toFixed(1)}%</span>
                                   </div>
                               </div>
-                              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                                  <div 
-                                    className="h-full rounded-full transition-all duration-500 ease-out"
-                                    style={{ 
+                              <div className="w-full h-1.5 bg-marine-700 overflow-hidden">
+                                  <div
+                                    className="h-full"
+                                    style={{
                                         width: `${cat.percentage}%`,
-                                        backgroundColor: COLORS[index % COLORS.length]
+                                        backgroundColor: SERIES_COLORS[index % SERIES_COLORS.length]
                                     }}
                                   ></div>
                               </div>
                           </div>
                       ))}
-                      <div className="pt-2 mt-2 border-t border-gray-100 text-right">
-                          <span className="text-xs text-gray-400">Total Tracked Spend: </span>
-                          <span className="text-sm font-bold text-gray-700">${categoryData.total.toLocaleString()}</span>
+                      <div className="pt-3 mt-3 border-t border-brass-500/10 flex items-center justify-between">
+                          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-mute">Total tracked</span>
+                          <span className="font-mono text-sm tabular-nums text-brass-400">${money(categoryData.total)}</span>
                       </div>
                   </div>
               ) : (
-                  <div className="h-full flex items-center justify-center text-gray-400">No transaction data available yet.</div>
+                  <div className="h-full flex items-center justify-center text-sm text-ink-mute">No transaction data yet.</div>
               )}
           </div>
         </div>
       </div>
 
       {/* Bank Spend Trend (Clustered Bar Chart) */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-indigo-600" />
-                  Monthly Spend Trend by Bank
-              </h3>
-          </div>
+      <div className="bg-marine-900 border border-brass-500/15 p-5 sm:p-6">
+          <h2 className="text-base font-medium text-ink mb-6 flex items-center gap-2.5">
+              <TrendingUp className="w-4 h-4 text-brass-400" strokeWidth={1.5} />
+              Monthly spend by bank
+          </h2>
           <div className="h-80">
             {clusteredData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                    <BarChart 
-                        data={clusteredData} 
-                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                    <BarChart
+                        data={clusteredData}
+                        margin={{ top: 10, right: 10, left: 0, bottom: 5 }}
                     >
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                        <XAxis dataKey="name" tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false} dy={10} />
-                        <YAxis tick={{fontSize: 12, fill: '#6b7280'}} axisLine={false} tickLine={false} tickFormatter={(value) => `$${value}`} />
-                        <Tooltip 
-                            formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]}
-                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                            cursor={{ fill: '#f9fafb' }}
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_GRID} />
+                        <XAxis dataKey="name" tick={{fontSize: 11, fill: CHART_AXIS}} axisLine={false} tickLine={false} dy={10} />
+                        <YAxis tick={{fontSize: 11, fill: CHART_AXIS}} axisLine={false} tickLine={false} tickFormatter={(value) => `$${value}`} width={56} />
+                        <Tooltip
+                            formatter={(value: number, name: string) => [`$${money(value)}`, name]}
+                            contentStyle={{
+                              background: '#0e2330',
+                              border: '1px solid rgba(201, 161, 87, 0.3)',
+                              borderRadius: 0,
+                              fontSize: 12,
+                            }}
+                            labelStyle={{ color: '#f4ead7' }}
+                            itemStyle={{ color: '#d9cba8' }}
+                            cursor={{ fill: 'rgba(201, 161, 87, 0.06)' }}
                         />
-                        <Legend wrapperStyle={{paddingTop: '20px'}} />
-                        
+                        <Legend wrapperStyle={{paddingTop: '16px', fontSize: 12, color: CHART_AXIS}} />
+
                         {uniqueBanks.map((bank, index) => (
-                            <Bar 
-                                key={bank} 
-                                dataKey={bank} 
-                                fill={BANK_COLORS[bank] || DEFAULT_BANK_COLORS[index % DEFAULT_BANK_COLORS.length]} 
-                                radius={[4, 4, 0, 0]} 
-                                barSize={40}
+                            <Bar
+                                key={bank}
+                                dataKey={bank}
+                                fill={SERIES_COLORS[index % SERIES_COLORS.length]}
+                                barSize={36}
                             />
                         ))}
                     </BarChart>
                 </ResponsiveContainer>
             ) : (
-                <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-                    Add bills to see your monthly bank spending comparison.
+                <div className="flex items-center justify-center h-full text-sm text-ink-mute">
+                    Add bills to compare monthly spend by bank.
                 </div>
             )}
           </div>
       </div>
 
       {/* Bills Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-marine-900 border border-brass-500/15 overflow-hidden">
           {/* Table Header with Filters */}
-          <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Recent Bills</h3>
-                  
+          <div className="p-5 sm:p-6 border-b border-brass-500/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 min-w-0">
+                  <h2 className="text-base font-medium text-ink shrink-0">Recent bills</h2>
+
                   {/* Month Filters */}
                   {availableMonths.length > 0 && (
-                    <div className="flex items-center bg-gray-100 p-1 rounded-lg overflow-x-auto">
-                        <button
-                            onClick={() => setSelectedMonthFilter('ALL')}
-                            className={`px-3 py-1 text-xs font-medium rounded-md transition-all whitespace-nowrap ${
-                                selectedMonthFilter === 'ALL' 
-                                ? 'bg-white text-indigo-600 shadow-sm' 
-                                : 'text-gray-500 hover:text-gray-700'
-                            }`}
-                        >
-                            ALL
+                    <div className="flex items-center border border-brass-500/20 overflow-x-auto custom-scrollbar">
+                        <button onClick={() => setSelectedMonthFilter('ALL')} className={monthChipClass(selectedMonthFilter === 'ALL')}>
+                            All
                         </button>
                         {availableMonths.map(month => (
                             <button
                                 key={month}
                                 onClick={() => setSelectedMonthFilter(month)}
-                                className={`px-3 py-1 text-xs font-medium rounded-md transition-all whitespace-nowrap ${
-                                    selectedMonthFilter === month 
-                                    ? 'bg-white text-indigo-600 shadow-sm' 
-                                    : 'text-gray-500 hover:text-gray-700'
-                                }`}
+                                className={monthChipClass(selectedMonthFilter === month)}
                             >
                                 {getMonthLabel(month)}
                             </button>
@@ -436,52 +444,54 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
                     </div>
                   )}
               </div>
-              
+
               <button
                 onClick={() => onOpenManualModal?.()}
-                className="flex items-center gap-2 text-sm bg-indigo-50 text-indigo-600 px-3 py-2 rounded-lg hover:bg-indigo-100 font-medium transition-colors whitespace-nowrap"
+                className="flex items-center justify-center gap-2 text-sm text-brass-300 border border-brass-500/30 px-4 py-2.5 hover:border-brass-500 hover:text-brass-400 font-medium transition-colors duration-150 whitespace-nowrap min-h-[44px] shrink-0"
               >
-                <Plus className="w-4 h-4" />
-                Add Manual Bill
+                <Plus className="w-4 h-4" strokeWidth={1.5} />
+                Add manually
               </button>
           </div>
-          
+
           {/* Mobile Card View */}
-          <div className="md:hidden divide-y divide-gray-100">
+          <div className="md:hidden divide-y divide-brass-500/10">
             {filteredBills.length === 0 ? (
-              <p className="px-6 py-8 text-center text-gray-400 text-sm">No bills found for this period.</p>
+              <p className="px-6 py-8 text-center text-ink-mute text-sm">No bills for this period.</p>
             ) : (
               filteredBills.map(bill => {
                 const daysLeft = getDaysRemaining(bill.dueDate);
                 return (
                   <div key={`mobile-${bill.id}`} className="p-4 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-semibold text-gray-900">{bill.cardName}</p>
-                        <p className="text-xs text-gray-400">{bill.bankName}</p>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-ink truncate">{bill.cardName}</p>
+                        <p className="text-xs text-ink-mute truncate">{bill.bankName}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold text-gray-900">${bill.totalAmount.toFixed(2)}</p>
-                        <span className={`inline-block mt-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                          bill.isPaid ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                      <div className="text-right shrink-0">
+                        <p className="font-mono tabular-nums text-ink">${money(bill.totalAmount)}</p>
+                        <span className={`inline-block mt-1 font-mono text-[9px] uppercase tracking-[0.12em] px-1.5 py-0.5 border ${
+                          bill.isPaid ? 'text-brass-400 border-brass-500/40' : 'text-warning border-warning/40'
                         }`}>
                           {bill.isPaid ? 'Paid' : 'Pending'}
                         </span>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-xs text-gray-500">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        <span>Due {formatDateForDisplay(bill.dueDate)}</span>
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-1.5 text-ink-mute">
+                        <Calendar className="w-3.5 h-3.5" strokeWidth={1.5} />
+                        <span className="font-mono tabular-nums">{formatDateForDisplay(bill.dueDate)}</span>
                       </div>
                       {!bill.isPaid && (
-                        <span className={`font-semibold ${daysLeft <= 3 ? 'text-red-500' : 'text-gray-500'}`}>
+                        <span className={`font-mono text-[10px] uppercase tracking-[0.12em] ${daysLeft <= DUE_SOON_DAYS ? 'text-danger' : 'text-ink-mute'}`}>
                           {getUrgencyLabel(daysLeft)}
                         </span>
                       )}
                       {bill.isPaid && bill.paymentDetails?.paidAt && (
-                        <span className="text-gray-400">Paid {formatDateForDisplay(bill.paymentDetails.paidAt)}</span>
+                        <span className="font-mono text-[10px] tabular-nums text-ink-mute">
+                          Paid {formatDateForDisplay(bill.paymentDetails.paidAt)}
+                        </span>
                       )}
                     </div>
 
@@ -489,37 +499,37 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
                       {!bill.isPaid ? (
                         <button
                           onClick={() => setSelectedBillForPayment(bill)}
-                          className="flex-1 py-2 text-center text-sm bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors"
+                          className="flex-1 py-3 text-center text-sm bg-brass-500 text-marine-900 font-medium hover:bg-brass-400 transition-colors duration-150 min-h-[48px]"
                         >
-                          Mark Paid
+                          Mark paid
                         </button>
                       ) : (
-                        <div className="flex-1 py-2 text-center text-sm bg-gray-100 text-gray-400 rounded-lg font-medium cursor-not-allowed">
+                        <div className="flex-1 py-3 text-center text-sm border border-brass-500/15 text-ink-mute min-h-[48px] flex items-center justify-center">
                           Settled
                         </div>
                       )}
                       {bill.filePath && (
                         <button
                           onClick={() => handleViewDocument(bill)}
-                          className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
-                          title="View Document"
+                          aria-label="View document"
+                          className="w-12 h-12 flex items-center justify-center text-ink-mute hover:text-brass-400 border border-brass-500/20 transition-colors duration-150"
                         >
-                          <FileText className="w-4 h-4" />
+                          <FileText className="w-4 h-4" strokeWidth={1.5} />
                         </button>
                       )}
                       <button
                         onClick={() => setBillToEdit(bill)}
-                        className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                        title="Edit Bill"
+                        aria-label="Edit bill"
+                        className="w-12 h-12 flex items-center justify-center text-ink-mute hover:text-brass-400 border border-brass-500/20 transition-colors duration-150"
                       >
-                        <Pencil className="w-4 h-4" />
+                        <Pencil className="w-4 h-4" strokeWidth={1.5} />
                       </button>
                       <button
                         onClick={() => setBillToDelete(bill.id)}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete Bill"
+                        aria-label="Delete bill"
+                        className="w-12 h-12 flex items-center justify-center text-ink-mute hover:text-danger border border-brass-500/20 transition-colors duration-150"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-4 h-4" strokeWidth={1.5} />
                       </button>
                     </div>
                   </div>
@@ -530,111 +540,108 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
 
           {/* Desktop Table View */}
           <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left text-sm text-gray-600">
-                  <thead className="bg-gray-50 text-xs uppercase font-semibold text-gray-500">
+              <table className="w-full text-left text-sm text-ink-soft">
+                  <thead className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-mute border-b border-brass-500/15">
                       <tr>
-                          <th className="px-6 py-4">Bank / Card</th>
-                          <th className="px-6 py-4">Due Date</th>
-                          <th className="px-6 py-4">Amount</th>
-                          <th className="px-6 py-4">Status</th>
-                          <th className="px-6 py-4">Payment Info</th>
-                          <th className="px-6 py-4">Actions</th>
+                          <th className="px-5 py-3 font-normal">Bank / card</th>
+                          <th className="px-5 py-3 font-normal">Due date</th>
+                          <th className="px-5 py-3 font-normal">Amount</th>
+                          <th className="px-5 py-3 font-normal">Status</th>
+                          <th className="px-5 py-3 font-normal">Payment</th>
+                          <th className="px-5 py-3 font-normal">Actions</th>
                       </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-brass-500/10">
                       {filteredBills.length === 0 ? (
                           <tr>
-                              <td colSpan={6} className="px-6 py-8 text-center text-gray-400">No bills found for this period.</td>
+                              <td colSpan={6} className="px-5 py-8 text-center text-ink-mute">No bills for this period.</td>
                           </tr>
                       ) : (
                           filteredBills.map(bill => (
-                              <tr key={bill.id} className="hover:bg-gray-50 transition-colors">
-                                  <td className="px-6 py-4">
-                                      <div className="font-medium text-gray-900">{bill.cardName}</div>
-                                      <div className="text-xs text-gray-400">{bill.bankName}</div>
+                              <tr key={bill.id} className="hover:bg-marine-800 transition-colors duration-150">
+                                  <td className="px-5 py-4">
+                                      <div className="text-ink">{bill.cardName}</div>
+                                      <div className="text-xs text-ink-mute">{bill.bankName}</div>
                                   </td>
-                                  <td className="px-6 py-4">
+                                  <td className="px-5 py-4">
                                     <div className="flex flex-col">
-                                        <span>{formatDateForDisplay(bill.dueDate)}</span>
+                                        <span className="font-mono text-xs tabular-nums">{formatDateForDisplay(bill.dueDate)}</span>
                                         {!bill.isPaid && (
-                                            <span className={`text-[10px] font-bold uppercase ${
-                                                getDaysRemaining(bill.dueDate) <= 3 ? 'text-red-600' : 'text-gray-400'
+                                            <span className={`font-mono text-[10px] uppercase tracking-[0.12em] mt-0.5 ${
+                                                getDaysRemaining(bill.dueDate) <= DUE_SOON_DAYS ? 'text-danger' : 'text-ink-mute'
                                             }`}>
-                                                {getDaysRemaining(bill.dueDate)} days left
+                                                {getUrgencyLabel(getDaysRemaining(bill.dueDate))}
                                             </span>
                                         )}
                                     </div>
                                   </td>
-                                  <td className="px-6 py-4 font-medium">${bill.totalAmount.toFixed(2)}</td>
-                                  <td className="px-6 py-4">
-                                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                          bill.isPaid 
-                                          ? 'bg-green-100 text-green-700' 
-                                          : 'bg-amber-100 text-amber-700'
+                                  <td className="px-5 py-4 font-mono tabular-nums text-ink">${money(bill.totalAmount)}</td>
+                                  <td className="px-5 py-4">
+                                      <span className={`inline-flex font-mono text-[10px] uppercase tracking-[0.14em] px-2 py-1 border whitespace-nowrap ${
+                                          bill.isPaid ? 'text-brass-400 border-brass-500/40' : 'text-warning border-warning/40'
                                       }`}>
                                           {bill.isPaid ? 'Paid' : 'Pending'}
                                       </span>
                                   </td>
-                                  <td className="px-6 py-4 text-xs">
+                                  <td className="px-5 py-4 text-xs">
                                       {bill.isPaid && bill.paymentDetails ? (
                                           <div>
-                                              <p><span className="font-semibold text-gray-700">{bill.paymentDetails.method}</span></p>
-                                              <p className="text-gray-400">Ref: {bill.paymentDetails.transactionId}</p>
+                                              <p className="text-ink-soft">{bill.paymentDetails.method}</p>
+                                              <p className="font-mono text-[10px] text-ink-mute">{bill.paymentDetails.transactionId}</p>
                                           </div>
                                       ) : (
-                                          <span className="text-gray-300">-</span>
+                                          <span className="text-ink-mute">—</span>
                                       )}
                                   </td>
-                                  <td className="px-6 py-4">
-                                      <div className="flex items-center gap-2">
+                                  <td className="px-5 py-4">
+                                      <div className="flex items-center gap-1">
                                           {bill.filePath && (
-                                              <button 
+                                              <button
                                                   onClick={() => handleViewDocument(bill)}
-                                                  className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-full transition-colors"
-                                                  title="View Uploaded Document"
+                                                  aria-label="View document"
+                                                  className={iconButtonClass}
+                                                  title="View uploaded document"
                                               >
-                                                  <FileText className="w-4 h-4" />
+                                                  <FileText className="w-4 h-4" strokeWidth={1.5} />
                                               </button>
                                           )}
 
                                           {!bill.isPaid ? (
-                                              <button 
+                                              <button
                                                   onClick={() => setSelectedBillForPayment(bill)}
-                                                  className="text-indigo-600 hover:text-indigo-800 font-medium text-xs bg-indigo-50 px-3 py-1 rounded-md hover:bg-indigo-100 transition-colors"
+                                                  className="text-brass-300 hover:text-brass-400 text-xs font-medium border border-brass-500/30 hover:border-brass-500 px-3 py-2 transition-colors duration-150 whitespace-nowrap"
                                               >
-                                                  Mark Paid
+                                                  Mark paid
                                               </button>
                                           ) : (
                                             <div className="flex flex-col items-start">
-                                                <button 
-                                                    disabled
-                                                    className="text-gray-400 font-medium text-xs cursor-not-allowed bg-gray-100 px-3 py-1 rounded-md"
-                                                >
+                                                <span className="text-ink-mute text-xs px-3 py-2 border border-brass-500/15">
                                                     Settled
-                                                </button>
-                                                {/* Display Date Below Button */}
+                                                </span>
                                                 {bill.paymentDetails?.paidAt && (
-                                                    <span className="text-[10px] text-gray-500 mt-1 ml-1">
+                                                    <span className="font-mono text-[10px] tabular-nums text-ink-mute mt-1 ml-1">
                                                         {formatDateForDisplay(bill.paymentDetails.paidAt)}
                                                     </span>
                                                 )}
                                             </div>
                                           )}
-                                          
-                                          <button 
+
+                                          <button
                                             onClick={() => setBillToEdit(bill)}
-                                            className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
-                                            title="Edit Bill Details"
+                                            aria-label="Edit bill"
+                                            className={iconButtonClass}
+                                            title="Edit bill details"
                                           >
-                                              <Pencil className="w-4 h-4" />
+                                              <Pencil className="w-4 h-4" strokeWidth={1.5} />
                                           </button>
 
-                                          <button 
+                                          <button
                                             onClick={() => setBillToDelete(bill.id)}
-                                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                                            title="Delete Bill"
+                                            aria-label="Delete bill"
+                                            className="w-10 h-10 flex items-center justify-center text-ink-mute hover:text-danger transition-colors duration-150"
+                                            title="Delete bill"
                                           >
-                                              <Trash2 className="w-4 h-4" />
+                                              <Trash2 className="w-4 h-4" strokeWidth={1.5} />
                                           </button>
                                       </div>
                                   </td>
@@ -646,14 +653,14 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
           </div>
       </div>
 
-      <PaymentModal 
+      <PaymentModal
         bill={selectedBillForPayment}
         isOpen={!!selectedBillForPayment}
         onClose={() => setSelectedBillForPayment(null)}
         onConfirm={handlePaymentConfirm}
       />
 
-      <EditBillModal 
+      <EditBillModal
         bill={billToEdit}
         isOpen={!!billToEdit}
         onClose={() => setBillToEdit(null)}
@@ -662,26 +669,26 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
 
       {/* Delete Confirmation Modal */}
       {billToDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl animate-scale-in">
-            <div className="flex items-center gap-3 text-red-600 mb-4">
-              <AlertTriangle className="w-6 h-6" />
-              <h3 className="text-lg font-bold text-gray-900">Delete Bill</h3>
+        <div className="fixed inset-0 bg-marine-950/80 flex items-center justify-center z-50 animate-fade-in p-4">
+          <div className="bg-marine-900 border border-brass-500/25 p-6 w-full max-w-sm animate-scale-in">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertTriangle className="w-5 h-5 text-danger" strokeWidth={1.5} />
+              <h2 className="text-lg font-medium text-ink">Delete bill</h2>
             </div>
-            <p className="text-gray-600 mb-6">Are you sure you want to delete this bill? This action cannot be undone.</p>
+            <p className="text-sm text-ink-soft mb-6">This cannot be undone.</p>
             <div className="flex justify-end gap-3">
-              <button 
+              <button
                 onClick={() => setBillToDelete(null)}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors"
+                className="px-4 py-2.5 text-sm text-ink-soft hover:text-ink font-medium transition-colors duration-150 min-h-[44px]"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={() => {
                   onDeleteBill(billToDelete);
                   setBillToDelete(null);
                 }}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors shadow-sm"
+                className="px-5 py-2.5 bg-danger text-ink font-medium text-sm hover:opacity-90 transition-opacity duration-150 min-h-[44px]"
               >
                 Delete
               </button>
@@ -698,16 +705,16 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
       />
 
       {/* Footer */}
-      <footer className="mt-12 pt-8 border-t border-gray-100 text-center">
-        <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-          <Globe className="w-4 h-4 text-indigo-500" />
+      <footer className="mt-12 pt-8 border-t border-brass-500/10 text-center">
+        <div className="flex items-center justify-center gap-2 text-sm text-ink-mute">
+          <Globe className="w-4 h-4 text-brass-400" strokeWidth={1.5} />
           <p>
-            <span className="font-semibold text-gray-700">Optimised for Singapore Banks</span>
-            <span className="mx-2 text-gray-300">•</span>
-            <span>More Countries to be Added</span>
+            <span className="text-ink-soft">Optimised for Singapore banks</span>
+            <span className="mx-2 text-ink-mute">·</span>
+            <span>More countries coming</span>
           </p>
         </div>
-        <p className="text-xs text-gray-400 mt-2">© 2026 CreditTrack · EliteX.CC Group</p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-mute mt-3">© 2026 CreditTrack · EliteX.CC Group</p>
       </footer>
     </div>
   );

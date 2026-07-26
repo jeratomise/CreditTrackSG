@@ -4,6 +4,7 @@ import {
   ArrowRight, Loader2, Camera, Sparkles, Bell,
   BarChart2, ChevronLeft, Check, Upload,
 } from 'lucide-react';
+import { BrandMark } from './BrandMark';
 
 type AuthMode = 'login' | 'signup' | 'forgot';
 
@@ -41,21 +42,6 @@ const PRICING_ROWS = [
   { label: 'Multi-device sync',     free: false,           pro: true },
   { label: 'Support',               free: '—',             pro: 'Priority' },
 ] as const;
-
-const BrandMark: React.FC<{ className?: string; strokeWidth?: number }> = ({ className, strokeWidth = 1.5 }) => (
-  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-    <path
-      d="M3 19 L9 13 L13 16 L21 5"
-      stroke="currentColor"
-      strokeWidth={strokeWidth}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <circle cx="9" cy="13" r="1.5" fill="currentColor" />
-    <circle cx="13" cy="16" r="1.5" fill="currentColor" />
-    <circle cx="21" cy="5" r="1.5" fill="currentColor" />
-  </svg>
-);
 
 /** Squared-off pill used for inline status / labels — replaces the rounded glass variant. */
 const Pill: React.FC<{ children: React.ReactNode; tone?: 'brass' | 'ink' }> = ({ children, tone = 'ink' }) => (
