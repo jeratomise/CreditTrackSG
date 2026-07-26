@@ -44,6 +44,60 @@ const CHART_AXIS = '#8a8474';   // ink-mute
 const money = (n: number): string =>
   n.toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/** Categories beyond this many are folded into a single "Other" row. */
+const TOP_CATEGORIES = 5;
+
+const formatDateForDisplay = (dateStr: string): string => {
+  if (!dateStr) return 'N/A';
+  const d = new Date(dateStr);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${day}/${month}/${d.getFullYear()}`;
+};
+
+const getDaysRemaining = (dueDateStr: string): number => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(dueDateStr);
+  due.setHours(0, 0, 0, 0);
+  return Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+};
+
+const getUrgencyTone = (days: number): string => {
+  if (days <= DUE_SOON_DAYS) return 'text-danger border-danger/40';
+  if (days <= DUE_WARNING_DAYS) return 'text-warning border-warning/40';
+  return 'text-ink-mute border-brass-500/25';
+};
+
+const getUrgencyLabel = (days: number): string => {
+  if (days < 0) return `Overdue ${Math.abs(days)}d`;
+  if (days === 0) return 'Due today';
+  if (days === 1) return 'Due tomorrow';
+  return `${days}d left`;
+};
+
+/** Inline trend line. Renders nothing below two points, where a trend is meaningless. */
+const Sparkline: React.FC<{ values: number[] }> = ({ values }) => {
+  if (values.length < 2) return null;
+  const width = 52;
+  const height = 16;
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const range = max - min || 1;
+  const points = values
+    .map((v, i) => {
+      const x = (i / (values.length - 1)) * width;
+      const y = height - 1 - ((v - min) / range) * (height - 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true" className="shrink-0">
+      <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+};
+
 export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAddBill, onDeleteBill, onOpenManualModal }) => {
   const [selectedBillForPayment, setSelectedBillForPayment] = useState<Bill | null>(null);
   const [billToEdit, setBillToEdit] = useState<Bill | null>(null);
@@ -77,12 +131,22 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
       });
     });
 
-    // Sort and limit to top 5, group rest as other
     const sorted = Object.keys(categories)
         .map(key => ({ name: key, value: categories[key], percentage: (categories[key] / (grandTotal || 1)) * 100 }))
         .sort((a, b) => b.value - a.value);
 
-    return { data: sorted, total: grandTotal };
+    // Keep the list readable: top N, everything else folded into one row.
+    const top = sorted.slice(0, TOP_CATEGORIES);
+    const rest = sorted.slice(TOP_CATEGORIES);
+    const data = rest.length > 0
+      ? [...top, {
+          name: `Other (${rest.length})`,
+          value: rest.reduce((sum, c) => sum + c.value, 0),
+          percentage: rest.reduce((sum, c) => sum + c.percentage, 0),
+        }]
+      : top;
+
+    return { data, total: grandTotal };
   }, [bills]);
 
   // ------------------------------------------------------------------
@@ -133,6 +197,50 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
   const upcomingBills = useMemo(() => bills
     .filter(b => !b.isPaid)
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()), [bills]);
+
+  // Bills already past their due date — the most urgent state in the app.
+  const overdue = useMemo(() => {
+    const items = bills.filter(b => !b.isPaid && getDaysRemaining(b.dueDate) < 0);
+    return {
+      total: items.reduce((sum, b) => sum + b.totalAmount, 0),
+      count: items.length,
+      worstDays: items.reduce((worst, b) => Math.max(worst, Math.abs(getDaysRemaining(b.dueDate))), 0),
+    };
+  }, [bills]);
+
+  // What actually needs paying this week, in dollars rather than a bare count.
+  const dueSoon = useMemo(() => {
+    const items = bills.filter(b => {
+      if (b.isPaid) return false;
+      const days = getDaysRemaining(b.dueDate);
+      return days >= 0 && days <= DUE_WARNING_DAYS;
+    });
+    return {
+      total: items.reduce((sum, b) => sum + b.totalAmount, 0),
+      count: items.length,
+    };
+  }, [bills]);
+
+  // Total spend per month, derived from the same rows that feed the bank chart.
+  const monthlyTotals = useMemo(() =>
+    clusteredData.map((row: any) =>
+      Object.entries(row)
+        .filter(([key]) => key !== 'name' && key !== '_sortKey')
+        .reduce((sum, [, value]) => sum + (typeof value === 'number' ? value : 0), 0)
+    ), [clusteredData]);
+
+  // Month-over-month change in spend. Null when there is no prior month to compare.
+  const spendDelta = useMemo(() => {
+    if (monthlyTotals.length < 2) return null;
+    const current = monthlyTotals[monthlyTotals.length - 1];
+    const previous = monthlyTotals[monthlyTotals.length - 2];
+    if (previous === 0) return null;
+    const previousLabel = (clusteredData[clusteredData.length - 2] as any)?.name ?? '';
+    return {
+      percent: ((current - previous) / previous) * 100,
+      previousLabel: String(previousLabel).split(' ')[0],
+    };
+  }, [monthlyTotals, clusteredData]);
 
   // Extract unique months from bills for filtering list
   const availableMonths = useMemo(() => {
@@ -201,39 +309,6 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
       onUpdateBill(updatedBill);
   };
 
-  const formatDateForDisplay = (dateStr: string) => {
-     if (!dateStr) return 'N/A';
-     const d = new Date(dateStr);
-     const day = String(d.getDate()).padStart(2, '0');
-     const month = String(d.getMonth() + 1).padStart(2, '0');
-     const year = d.getFullYear();
-     return `${day}/${month}/${year}`;
-  };
-
-  // Days remaining helper
-  const getDaysRemaining = (dueDateStr: string) => {
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      const due = new Date(dueDateStr);
-      due.setHours(0,0,0,0);
-      const diffTime = due.getTime() - today.getTime();
-      return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  };
-
-  const getUrgencyTone = (days: number) => {
-      if (days < 0) return 'text-danger border-danger/40';
-      if (days <= DUE_SOON_DAYS) return 'text-danger border-danger/40';
-      if (days <= DUE_WARNING_DAYS) return 'text-warning border-warning/40';
-      return 'text-ink-mute border-brass-500/25';
-  };
-
-  const getUrgencyLabel = (days: number) => {
-      if (days < 0) return `Overdue ${Math.abs(days)}d`;
-      if (days === 0) return 'Due today';
-      if (days === 1) return 'Due tomorrow';
-      return `${days}d left`;
-  };
-
   const getMonthLabel = (yyyyMm: string) => {
     if (!yyyyMm) return '';
     const [year, month] = yyyyMm.split('-');
@@ -271,34 +346,62 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
             </div>
             <AlertTriangle className="w-5 h-5 text-brass-400 shrink-0" strokeWidth={1.5} />
           </div>
+          {/* Trend below is monthly SPEND, not outstanding — we hold no history of balances. */}
+          {spendDelta && (
+            <div className="flex items-center justify-between gap-2 mt-3 text-brass-400">
+              <span className="font-mono text-[10px] tabular-nums text-ink-mute">
+                Spend {spendDelta.percent >= 0 ? '+' : ''}{spendDelta.percent.toFixed(0)}% vs {spendDelta.previousLabel}
+              </span>
+              <Sparkline values={monthlyTotals} />
+            </div>
+          )}
         </div>
 
         <div className="bg-marine-900 border border-brass-500/15 p-5">
           <div className="flex justify-between items-start gap-3">
             <div className="min-w-0">
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-mute">Bills due</p>
-              <p className="font-mono text-2xl tabular-nums text-ink mt-2">{upcomingBills.length}</p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-mute">Due in {DUE_WARNING_DAYS} days</p>
+              <p className="font-mono text-2xl tabular-nums text-ink mt-2">${money(dueSoon.total)}</p>
             </div>
             <Clock className="w-5 h-5 text-brass-400 shrink-0" strokeWidth={1.5} />
           </div>
+          <p className="font-mono text-[10px] tabular-nums text-ink-mute mt-3">
+            {dueSoon.count} {dueSoon.count === 1 ? 'bill' : 'bills'}
+          </p>
         </div>
 
-        <div className="bg-marine-900 border border-brass-500/15 p-5">
-          <div className="flex justify-between items-start gap-3">
-            <div className="min-w-0">
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-mute">Processed</p>
-              <p className="font-mono text-2xl tabular-nums text-ink mt-2">{bills.length}</p>
+        {overdue.count > 0 ? (
+          <div className="bg-marine-900 border border-danger/50 p-5">
+            <div className="flex justify-between items-start gap-3">
+              <div className="min-w-0">
+                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-danger">Overdue</p>
+                <p className="font-mono text-2xl tabular-nums text-danger mt-2">${money(overdue.total)}</p>
+              </div>
+              <AlertTriangle className="w-5 h-5 text-danger shrink-0" strokeWidth={1.5} />
             </div>
-            <CheckCircle className="w-5 h-5 text-brass-400 shrink-0" strokeWidth={1.5} />
+            <p className="font-mono text-[10px] tabular-nums text-ink-mute mt-3">
+              {overdue.count} {overdue.count === 1 ? 'bill' : 'bills'} · {overdue.worstDays}d late
+            </p>
           </div>
-        </div>
+        ) : (
+          <div className="bg-marine-900 border border-brass-500/15 p-5">
+            <div className="flex justify-between items-start gap-3">
+              <div className="min-w-0">
+                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-mute">Overdue</p>
+                <p className="font-mono text-2xl tabular-nums text-ink mt-2">$0.00</p>
+              </div>
+              <CheckCircle className="w-5 h-5 text-brass-400 shrink-0" strokeWidth={1.5} />
+            </div>
+            <p className="font-mono text-[10px] tabular-nums text-ink-mute mt-3">Nothing late</p>
+          </div>
+        )}
       </div>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* Upcoming List */}
-        <div className="bg-marine-900 border border-brass-500/15 p-5 sm:p-6 h-96 flex flex-col">
+        <div className="bg-marine-900 border border-brass-500/15 p-5 sm:p-6 lg:h-96 flex flex-col">
           <h2 className="text-base font-medium text-ink mb-4 flex items-center gap-2.5">
               <Calendar className="w-4 h-4 text-brass-400" strokeWidth={1.5} />
               Upcoming deadlines
@@ -332,7 +435,7 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
         </div>
 
         {/* Spend Breakdown */}
-        <div className="bg-marine-900 border border-brass-500/15 p-5 sm:p-6 h-96 flex flex-col">
+        <div className="bg-marine-900 border border-brass-500/15 p-5 sm:p-6 lg:h-96 flex flex-col">
           <h2 className="text-base font-medium text-ink mb-4 flex items-center gap-2.5">
             <TrendingUp className="w-4 h-4 text-brass-400" strokeWidth={1.5} />
             Spend by category
@@ -403,12 +506,16 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
                         />
                         <Legend wrapperStyle={{paddingTop: '16px', fontSize: 12, color: CHART_AXIS}} />
 
+                        {/* Stacked, not clustered: with 7 banks the clustered bars became
+                            unreadable slivers on a phone, and the monthly total — the thing
+                            worth trending — was not represented by any single shape. */}
                         {uniqueBanks.map((bank, index) => (
                             <Bar
                                 key={bank}
                                 dataKey={bank}
+                                stackId="spend"
                                 fill={SERIES_COLORS[index % SERIES_COLORS.length]}
-                                barSize={36}
+                                maxBarSize={56}
                             />
                         ))}
                     </BarChart>
