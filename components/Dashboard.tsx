@@ -21,6 +21,9 @@ interface DashboardProps {
 const MONTH_FILTER_KEY = 'credittrack_month_filter';
 const DUE_SOON_DAYS = 3;
 const DUE_WARNING_DAYS = 7;
+const DUE_NEAR_DAYS = 14;
+/** One block per remaining day, so the countdown gains detail through the final week. */
+const DUE_PIP_COUNT = 7;
 
 /**
  * Series colours are a brass→marine tonal ramp rather than a rainbow.
@@ -63,10 +66,31 @@ const getDaysRemaining = (dueDateStr: string): number => {
   return Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 };
 
-const getUrgencyTone = (days: number): string => {
-  if (days <= DUE_SOON_DAYS) return 'text-danger border-danger/40';
-  if (days <= DUE_WARNING_DAYS) return 'text-warning border-warning/40';
-  return 'text-ink-mute border-brass-500/25';
+type UrgencyTier = 'overdue' | 'critical' | 'warning' | 'near' | 'calm';
+
+const getUrgencyTier = (days: number): UrgencyTier => {
+  if (days < 0) return 'overdue';
+  if (days <= DUE_SOON_DAYS) return 'critical';
+  if (days <= DUE_WARNING_DAYS) return 'warning';
+  if (days <= DUE_NEAR_DAYS) return 'near';
+  return 'calm';
+};
+
+// Written out in full: Tailwind cannot see class names built by interpolation.
+const TIER_TEXT: Record<UrgencyTier, string> = {
+  overdue: 'text-danger',
+  critical: 'text-danger',
+  warning: 'text-warning',
+  near: 'text-ink-soft',
+  calm: 'text-ink-mute',
+};
+
+const TIER_PIP: Record<UrgencyTier, string> = {
+  overdue: 'bg-danger',
+  critical: 'bg-danger',
+  warning: 'bg-warning',
+  near: 'bg-ink-soft',
+  calm: 'bg-ink-mute',
 };
 
 const getUrgencyLabel = (days: number): string => {
@@ -75,6 +99,49 @@ const getUrgencyLabel = (days: number): string => {
   if (days === 1) return 'Due tomorrow';
   return `${days}d left`;
 };
+
+interface DueCountdownProps {
+  days: number;
+  /** Right-align where the countdown sits at the end of a row. */
+  align?: 'start' | 'end';
+}
+
+/**
+ * Segmented countdown to a bill's due date.
+ *
+ * Seven blocks, one per remaining day. The row sits full and quiet while a bill
+ * is more than a week out, then loses a block a day through the final week, so
+ * the detail concentrates where the decision actually happens. At zero the track
+ * is fully drained; past due it collapses to a solid bar, because a negative day
+ * count has no segments to show.
+ *
+ * Urgency is carried by block count as well as colour, so it still reads without
+ * colour vision. The blocks are decorative — the text label is what a screen
+ * reader announces.
+ */
+function DueCountdown({ days, align = 'start' }: DueCountdownProps) {
+  const tier = getUrgencyTier(days);
+  const filled = Math.min(Math.max(days, 0), DUE_PIP_COUNT);
+  // A drained track on the due date itself should read as spent, not as absent.
+  const emptyPip = days === 0 ? 'bg-danger/25' : 'bg-marine-700';
+
+  return (
+    <span className={`flex flex-col gap-1 ${align === 'end' ? 'items-end' : 'items-start'}`}>
+      <span className={`font-mono text-[10px] uppercase tracking-[0.12em] ${TIER_TEXT[tier]}`}>
+        {getUrgencyLabel(days)}
+      </span>
+      {days < 0 ? (
+        <span className="h-2 w-[54px] bg-danger" aria-hidden="true" />
+      ) : (
+        <span className="flex gap-[2px]" aria-hidden="true">
+          {Array.from({ length: DUE_PIP_COUNT }, (_, i) => (
+            <span key={i} className={`h-2 w-[6px] ${i < filled ? TIER_PIP[tier] : emptyPip}`} />
+          ))}
+        </span>
+      )}
+    </span>
+  );
+}
 
 /** Inline trend line. Renders nothing below two points, where a trend is meaningless. */
 const Sparkline: React.FC<{ values: number[] }> = ({ values }) => {
@@ -421,11 +488,9 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
                         <p className="text-sm text-ink truncate">{bill.bankName} · {bill.cardName}</p>
                         <p className="font-mono text-[10px] tabular-nums text-ink-mute mt-0.5">{formatDateForDisplay(bill.dueDate)}</p>
                       </div>
-                      <div className="text-right shrink-0">
+                      <div className="shrink-0 flex flex-col items-end gap-1.5">
                         <p className="font-mono text-sm tabular-nums text-ink">${money(bill.totalAmount)}</p>
-                        <span className={`inline-block mt-1 font-mono text-[9px] uppercase tracking-[0.12em] px-1.5 py-0.5 border ${getUrgencyTone(daysLeft)}`}>
-                            {getUrgencyLabel(daysLeft)}
-                        </span>
+                        <DueCountdown days={daysLeft} align="end" />
                       </div>
                     </div>
                   );
@@ -587,16 +652,12 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between gap-2 text-xs">
+                    <div className="flex items-start justify-between gap-2 text-xs">
                       <div className="flex items-center gap-1.5 text-ink-mute">
                         <Calendar className="w-3.5 h-3.5" strokeWidth={1.5} />
                         <span className="font-mono tabular-nums">{formatDateForDisplay(bill.dueDate)}</span>
                       </div>
-                      {!bill.isPaid && (
-                        <span className={`font-mono text-[10px] uppercase tracking-[0.12em] ${daysLeft <= DUE_SOON_DAYS ? 'text-danger' : 'text-ink-mute'}`}>
-                          {getUrgencyLabel(daysLeft)}
-                        </span>
-                      )}
+                      {!bill.isPaid && <DueCountdown days={daysLeft} align="end" />}
                       {bill.isPaid && bill.paymentDetails?.paidAt && (
                         <span className="font-mono text-[10px] tabular-nums text-ink-mute">
                           Paid {formatDateForDisplay(bill.paymentDetails.paidAt)}
@@ -676,11 +737,9 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
                                     <div className="flex flex-col">
                                         <span className="font-mono text-xs tabular-nums">{formatDateForDisplay(bill.dueDate)}</span>
                                         {!bill.isPaid && (
-                                            <span className={`font-mono text-[10px] uppercase tracking-[0.12em] mt-0.5 ${
-                                                getDaysRemaining(bill.dueDate) <= DUE_SOON_DAYS ? 'text-danger' : 'text-ink-mute'
-                                            }`}>
-                                                {getUrgencyLabel(getDaysRemaining(bill.dueDate))}
-                                            </span>
+                                            <div className="mt-1.5">
+                                                <DueCountdown days={getDaysRemaining(bill.dueDate)} />
+                                            </div>
                                         )}
                                     </div>
                                   </td>
