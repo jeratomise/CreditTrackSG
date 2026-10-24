@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { supabase } from "../_lib/clients.js";
-import { requireAuth } from "../_lib/auth.js";
+import { requireAuth, requireAdmin } from "../_lib/auth.js";
 
 // System + admin utility routes. NOTE: kept together in one router (rather than a
 // separate admin.ts) on purpose — Vercel turns each api/*.ts file into its own
@@ -52,16 +52,8 @@ router.get("/api/status", async (_req, res) => {
 //
 // The browser can't read auth.users directly (not exposed via PostgREST), so this
 // runs server-side with the service-role key, gated by auth + an admin check.
-router.get("/api/admin/users", requireAuth, async (req: any, res) => {
+router.get("/api/admin/users", requireAuth, requireAdmin, async (_req, res) => {
   if (!supabase) return res.status(500).json({ error: "Database not initialized" });
-
-  // Caller must be an admin (verified from their own profile).
-  const { data: me } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", req.authUser.id)
-    .single();
-  if (me?.role !== "admin") return res.status(403).json({ error: "Admin only" });
 
   try {
     // Profiles = users who have logged in at least once (role/status/name live here).

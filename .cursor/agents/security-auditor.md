@@ -15,7 +15,8 @@ Report only what you verified. Severity: Critical, High, Medium.
 
 - Identity on user-facing routes comes from `requireAuth` and `req.authUser.id`. A `userId` or `email` in the body or query must not choose the row.
 - `SUPABASE_SERVICE_ROLE_KEY` is server-only. No `VITE_` prefix on the service role, Gemini, Stripe, Resend, or `CRON_SECRET`.
-- `VITE_GEMINI_API_KEY` is absent from env examples, Vite config, and client code. Gemini calls stay in `api/_lib/ai.ts`. The browser uses `services/geminiService.ts` to call `/api/extract-bill` and `/api/insights`.
+- `VITE_GEMINI_API_KEY` and any `VITE_OPENROUTER_*` name are absent from env examples, Vite config, and client code. Gemini and OpenRouter calls stay in `api/_lib/ai.ts`. The browser uses `services/geminiService.ts` to call `/api/extract-bill` and `/api/insights`.
+- `/api/admin/ai-config` routes use `requireAuth` and `requireAdmin`, return key presence as booleans only, and the `ai_config` table has RLS enabled with no anon or authenticated access.
 - Bill extraction reads Storage by an ownership-checked path. It does not accept file bytes or base64 in the JSON body.
 - `/api/stripe-webhook` is outside the JSON parser in `api/server.ts` and verifies `STRIPE_WEBHOOK_SECRET`.
 - `/api/trigger-*` uses `validateCronSecret` and fails closed when `CRON_SECRET` is unset.

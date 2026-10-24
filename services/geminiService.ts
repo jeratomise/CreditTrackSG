@@ -1,9 +1,9 @@
-import { AIExtractionResponse } from "../types";
+import { AIExtractionResponse, AiModelConfig, AiSettings } from "../types";
 import { supabase } from "../lib/supabaseClient";
 
-// NOTE: All Gemini calls now run on the server (see api/server.ts). The Gemini API
-// key is NEVER sent to the browser. This module is a thin authenticated client that
-// forwards requests to our own backend, which holds the key in a server-only env var.
+// NOTE: All AI calls run on the server (see api/_routes/ai.ts), using the provider
+// and model an admin picked. Provider keys are NEVER sent to the browser. This module
+// is a thin authenticated client that forwards requests to our own backend.
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
@@ -53,3 +53,24 @@ export const generateOptimizationAdvice = async (transactions: any[]) => {
     return { advice: "Could not generate advice.", riskScore: 0, missedMiles: 0, anomalies: [] };
   }
 };
+
+// --- Admin: AI provider and model ---
+
+async function adminRequest<T>(method: "GET" | "PUT" | "POST", path: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method,
+    headers: await authHeaders(),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data as T;
+}
+
+export const getAiSettings = () => adminRequest<AiSettings>("GET", "/api/admin/ai-config");
+
+export const saveAiSettings = (config: AiModelConfig) =>
+  adminRequest<AiSettings>("PUT", "/api/admin/ai-config", config);
+
+export const testAiSettings = (config: AiModelConfig) =>
+  adminRequest<{ ok: boolean; latencyMs?: number; error?: string }>("POST", "/api/admin/ai-config/test", config);

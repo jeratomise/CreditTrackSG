@@ -31,6 +31,23 @@ export interface SystemConfig {
   }
 }
 
+/** Shared by the browser and the backend (api/_lib/aiConfig.ts). */
+export type AiProvider = 'gemini' | 'openrouter';
+
+export interface AiModelConfig {
+  provider: AiProvider;
+  model: string;
+}
+
+/** Admin view of AI settings. `active` differs from `config` when the saved provider's key is missing. */
+export interface AiSettings {
+  config: AiModelConfig;
+  active: AiModelConfig;
+  defaults: AiModelConfig;
+  suggestions: Record<AiProvider, string[]>;
+  keys: Record<AiProvider, boolean>;
+}
+
 export interface Transaction {
   id: string;
   date: string;

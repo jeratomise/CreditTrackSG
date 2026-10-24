@@ -1,6 +1,9 @@
 import { Type } from "@google/genai";
 import { genai, supabase, STORAGE_BUCKET } from "./clients.js";
-import type { AIExtractionResponse } from "../../types";
+import type { AIExtractionResponse, AiModelConfig } from "../../types";
+
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_TIMEOUT_MS = 120_000;
 
 // The MileLion persona prompt. Kept here (not imported from the frontend constants)
 // so the serverless function has no runtime dependency on files outside /api.
@@ -86,49 +89,161 @@ const EXTRACTION_SCHEMA = {
   },
 };
 
+const INSIGHTS_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    advice: { type: Type.STRING, description: "3 bullet points starting with •, separated by newlines" },
+    riskScore: { type: Type.NUMBER },
+    missedMiles: { type: Type.NUMBER, description: "Estimated missed miles count" },
+    anomalies: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of unusual transactions" },
+  },
+};
+
+const PING_SCHEMA = {
+  type: Type.OBJECT,
+  properties: { ok: { type: Type.BOOLEAN } },
+  required: ["ok"],
+};
+
+type GeminiSchema = typeof EXTRACTION_SCHEMA | typeof INSIGHTS_SCHEMA | typeof PING_SCHEMA;
+
+type OpenRouterPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } }
+  | { type: "file"; file: { filename: string; file_data: string } };
+
+/** Gemini's `Type` schema → standard JSON Schema for OpenAI-compatible providers. */
+function toJsonSchema(schema: any): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (schema.type) out.type = String(schema.type).toLowerCase();
+  if (schema.description) out.description = schema.description;
+  if (schema.properties) {
+    out.properties = Object.fromEntries(
+      Object.entries(schema.properties).map(([key, value]) => [key, toJsonSchema(value)])
+    );
+  }
+  if (schema.items) out.items = toJsonSchema(schema.items);
+  if (schema.required) out.required = schema.required;
+  return out;
+}
+
+/** Some OpenRouter models wrap JSON in a markdown fence even when asked not to. */
+function parseJsonReply(text: string): unknown {
+  const unfenced = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  return JSON.parse(unfenced);
+}
+
+async function callGemini(model: string, contents: any, schema: GeminiSchema): Promise<unknown> {
+  if (!genai) throw new Error("GEMINI_API_KEY is not set");
+  const response = await genai.models.generateContent({
+    model,
+    contents,
+    config: {
+      systemInstruction: MILELION_SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      responseSchema: schema,
+    },
+  });
+  if (!response.text) throw new Error("Empty response from AI");
+  return JSON.parse(response.text);
+}
+
+async function callOpenRouter(
+  model: string,
+  parts: OpenRouterPart[],
+  schemaName: string,
+  schema: GeminiSchema
+): Promise<unknown> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
+
+  const res = await fetch(OPENROUTER_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": process.env.APP_URL || "https://credittrack.elitex.cc",
+      "X-Title": "CreditTrack",
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: MILELION_SYSTEM_PROMPT },
+        { role: "user", content: parts },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: schemaName, strict: false, schema: toJsonSchema(schema) },
+      },
+    }),
+    signal: AbortSignal.timeout(OPENROUTER_TIMEOUT_MS),
+  });
+
+  const body: any = await res.json().catch(() => null);
+  if (!res.ok || body?.error) {
+    throw new Error(`OpenRouter ${res.status}: ${body?.error?.message || "request failed"}`);
+  }
+  const content = body?.choices?.[0]?.message?.content;
+  if (typeof content !== "string" || !content.trim()) throw new Error("Empty response from AI");
+  return parseJsonReply(content);
+}
+
 /**
  * Download a previously-uploaded statement from Storage and extract structured bill
- * data with Gemini. The caller is responsible for verifying that `filePath` belongs
- * to the requesting user before calling this.
+ * data with the configured provider. The caller is responsible for verifying that
+ * `filePath` belongs to the requesting user before calling this.
  */
-export async function extractBillFromStorage(filePath: string): Promise<AIExtractionResponse> {
-  if (!genai) throw new Error("AI is not configured");
+export async function extractBillFromStorage(filePath: string, ai: AiModelConfig): Promise<AIExtractionResponse> {
   if (!supabase) throw new Error("Storage not initialized");
 
   const { data: fileBlob, error: dlErr } = await supabase.storage.from(STORAGE_BUCKET).download(filePath);
   if (dlErr || !fileBlob) throw new Error("Could not read the uploaded file");
 
+  const mimeType = mimeTypeFromPath(filePath);
   const base64Data = Buffer.from(await fileBlob.arrayBuffer()).toString("base64");
 
-  const response = await genai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: {
+  if (ai.provider === "openrouter") {
+    const dataUrl = `data:${mimeType};base64,${base64Data}`;
+    const filePart: OpenRouterPart =
+      mimeType === "application/pdf"
+        ? { type: "file", file: { filename: "statement.pdf", file_data: dataUrl } }
+        : { type: "image_url", image_url: { url: dataUrl } };
+    return (await callOpenRouter(
+      ai.model,
+      [filePart, { type: "text", text: EXTRACTION_PROMPT }],
+      "bill_extraction",
+      EXTRACTION_SCHEMA
+    )) as AIExtractionResponse;
+  }
+
+  return (await callGemini(
+    ai.model,
+    {
       parts: [
-        { inlineData: { mimeType: mimeTypeFromPath(filePath), data: base64Data } },
+        { inlineData: { mimeType, data: base64Data } },
         { text: EXTRACTION_PROMPT },
       ],
     },
-    config: {
-      systemInstruction: MILELION_SYSTEM_PROMPT,
-      responseMimeType: "application/json",
-      responseSchema: EXTRACTION_SCHEMA,
-    },
-  });
+    EXTRACTION_SCHEMA
+  )) as AIExtractionResponse;
+}
 
-  if (!response.text) throw new Error("Empty response from AI");
-  return JSON.parse(response.text) as AIExtractionResponse;
+/** Cheap round trip that confirms a provider key and model ID work, without a statement. */
+export async function testAiModel(ai: AiModelConfig): Promise<void> {
+  const prompt = 'Reply with exactly this JSON object and nothing else: {"ok": true}';
+  const reply: any =
+    ai.provider === "openrouter"
+      ? await callOpenRouter(ai.model, [{ type: "text", text: prompt }], "ping", PING_SCHEMA)
+      : await callGemini(ai.model, prompt, PING_SCHEMA);
+  if (reply?.ok !== true) throw new Error("The model replied, but not with the expected JSON");
 }
 
 /** Generate Milelion-style optimization advice + risk score for a set of transactions. */
-export async function generateInsights(transactions: unknown[]): Promise<InsightsResult> {
-  if (!genai) throw new Error("AI is not configured");
-
+export async function generateInsights(transactions: unknown[], ai: AiModelConfig): Promise<InsightsResult> {
   // Cap the number of transactions to bound prompt size / cost.
   const capped = transactions.slice(0, 300);
 
-  const response = await genai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: `Analyze these transactions based on Singapore specific credit card strategies (Milelion).
+  const prompt = `Analyze these transactions based on Singapore specific credit card strategies (Milelion).
       Identify which transactions missed a bonus mile opportunity (e.g. using a general card for online spend instead of DBS WWMC).
 
       **Advice Formatting:**
@@ -137,22 +252,11 @@ export async function generateInsights(transactions: unknown[]): Promise<Insight
       **Risk Score:**
       Calculate a 'risk score' (0-100) based on potential for late fees or suboptimal card usage.
 
-      Transactions JSON: ${JSON.stringify(capped)}`,
-    config: {
-      systemInstruction: MILELION_SYSTEM_PROMPT,
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          advice: { type: Type.STRING, description: "3 bullet points starting with •, separated by newlines" },
-          riskScore: { type: Type.NUMBER },
-          missedMiles: { type: Type.NUMBER, description: "Estimated missed miles count" },
-          anomalies: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of unusual transactions" },
-        },
-      },
-    },
-  });
+      Transactions JSON: ${JSON.stringify(capped)}`;
 
-  if (!response.text) return { advice: "Could not generate advice.", riskScore: 0, missedMiles: 0, anomalies: [] };
-  return JSON.parse(response.text) as InsightsResult;
+  const result =
+    ai.provider === "openrouter"
+      ? await callOpenRouter(ai.model, [{ type: "text", text: prompt }], "insights", INSIGHTS_SCHEMA)
+      : await callGemini(ai.model, prompt, INSIGHTS_SCHEMA);
+  return result as InsightsResult;
 }

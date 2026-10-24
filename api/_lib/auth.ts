@@ -27,6 +27,18 @@ export async function requireAuth(req: express.Request, res: express.Response, n
   next();
 }
 
+/** Run after requireAuth. Admin is read from the caller's own profile row, never from the request. */
+export async function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (!supabase) return res.status(500).json({ error: "Database not initialized" });
+  const { data } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", (req as AuthedRequest).authUser.id)
+    .single();
+  if (data?.role !== "admin") return res.status(403).json({ error: "Admin only" });
+  next();
+}
+
 /**
  * Cron-secret middleware. FAILS CLOSED: if CRON_SECRET is unset the endpoint is
  * denied rather than left public. Uses a length-safe constant-time comparison to

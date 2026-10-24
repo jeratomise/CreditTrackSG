@@ -31,6 +31,16 @@ export const insightsSchema = z.object({
   transactions: z.array(z.unknown()).max(2000),
 });
 
+export const aiConfigSchema = z.object({
+  provider: z.enum(["gemini", "openrouter"]),
+  model: z
+    .string()
+    .trim()
+    .min(1, "Model ID is required")
+    .max(120)
+    .regex(/^[A-Za-z0-9._:\/-]+$/, "Model ID may only contain letters, numbers and . _ : / -"),
+});
+
 export type ValidationResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 /** Safe-parse a body against a schema, returning a flat error string on failure. */

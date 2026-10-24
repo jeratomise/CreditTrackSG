@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 import { User, SystemConfig } from '../types';
 import { Save, Trash2, Power, LayoutTemplate, Plus, LockKeyhole } from 'lucide-react';
 import { fieldClass, labelClass, primaryButtonClass } from './formStyles';
+import { AdminAiSettings } from './AdminAiSettings';
 
 const SAVE_STATUS_TIMEOUT_MS = 3000;
 
@@ -31,7 +32,7 @@ const StatusChip: React.FC<{ tone: 'brass' | 'danger' | 'warning' | 'mute'; chil
 
 export const AdminPanel: React.FC = () => {
   const { user, getAllUsers, toggleUserStatus, updateUserRole, systemConfig, updateSystemConfig } = useAuth();
-  const [activeTab, setActiveTab] = useState<'users' | 'cms'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'cms' | 'ai'>('users');
   const [usersList, setUsersList] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
 
@@ -174,7 +175,12 @@ export const AdminPanel: React.FC = () => {
           <button onClick={() => setActiveTab('cms')} className={tabClass(activeTab === 'cms')}>
               Front page
           </button>
+          <button onClick={() => setActiveTab('ai')} className={tabClass(activeTab === 'ai')}>
+              AI model
+          </button>
       </div>
+
+      {activeTab === 'ai' && <AdminAiSettings />}
 
       {/* User Management Tab */}
       {activeTab === 'users' && (

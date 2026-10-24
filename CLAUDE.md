@@ -31,9 +31,9 @@ Full-stack TypeScript monorepo: a React SPA (Vite) + an Express backend, deploye
 - `server.ts` — **local dev wrapper only.** Imports the SAME `app` + cron fns from `api/server.ts`, loads `dotenv` first, mounts Vite/static, schedules in-process cron, and `listen`s. Never add routes here.
 
 **Backend layout:**
-- `api/_lib/` — shared, no HTTP: `clients.ts` (Supabase service-role / Stripe / Resend / Gemini init), `util.ts` (`esc`, `maskCardName`, `getDaysRemaining`), `auth.ts` (`requireAuth` → `req.authUser`, `validateCronSecret`), `email.ts` (`sendEmail`), `ai.ts` (Gemini extract/insights + prompt & schema — single source for the AI prompt), `validation.ts` (Zod schemas + `validate()` helper).
+- `api/_lib/` — shared, no HTTP: `clients.ts` (Supabase service-role / Stripe / Resend / Gemini init), `util.ts` (`esc`, `maskCardName`, `getDaysRemaining`), `auth.ts` (`requireAuth` → `req.authUser`, `requireAdmin`, `validateCronSecret`), `email.ts` (`sendEmail`), `ai.ts` (Gemini/OpenRouter extract/insights + prompt & schema — single source for the AI prompt), `aiConfig.ts` (admin-selected provider/model from the `ai_config` table, default Gemini `gemini-2.5-flash`), `validation.ts` (Zod schemas + `validate()` helper).
 - `api/_cron.ts` — `runDailyReminders` / `runWeeklyUpdate` (the email-building scheduled jobs).
-- `api/_routes/` — one Express `Router` per domain, each declaring absolute `/api/...` paths: `billing.ts` (webhook + checkout + portal), `health.ts` (health + status + the admin `/api/admin/users` listing), `reminders.ts` (schedule/cancel reminder + email-logs), `ai.ts` (extract-bill + insights), `triggers.ts` (cron triggers), `referrals.ts`.
+- `api/_routes/` — one Express `Router` per domain, each declaring absolute `/api/...` paths: `billing.ts` (webhook + checkout + portal), `health.ts` (health + status + the admin `/api/admin/users` listing), `reminders.ts` (schedule/cancel reminder + email-logs), `ai.ts` (extract-bill + insights + admin `/api/admin/ai-config`), `triggers.ts` (cron triggers), `referrals.ts`.
 
 ⚠️ **The `_` prefix is load-bearing — do not remove it.** Vercel turns every NON-underscore `.ts` file under `api/` into its own serverless function, and the Hobby plan caps a deployment at **12 functions**. The helper dirs are prefixed with `_` so Vercel ignores them and bundles them into the single `api/server.ts` function. So: **never add a new top-level `api/*.ts` file** (it becomes a 13th+ function and the deploy fails at "Deploying outputs"); add endpoints inside an existing `api/_routes/*.ts` router instead. The Stripe webhook MUST stay on the JSON-parser skip-list in `api/server.ts`.
 
@@ -88,7 +88,8 @@ VITE_SUPABASE_ANON_KEY
 # Backend (server-only — never VITE_ prefixed)
 SUPABASE_URL / SUPABASE_ANON_KEY        # fallbacks
 SUPABASE_SERVICE_ROLE_KEY               # privileged backend DB access (required in prod)
-GEMINI_API_KEY                          # server-side Gemini
+GEMINI_API_KEY                          # server-side Gemini (default AI provider)
+OPENROUTER_API_KEY                      # optional; enables OpenRouter in Admin → AI model
 RESEND_API_KEY / EMAIL_FROM             # email delivery
 STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET
 STRIPE_PRO_PRICE_ID_MONTHLY / STRIPE_PRO_PRICE_ID_ANNUAL
@@ -98,7 +99,7 @@ APP_URL                                 # base URL for links/redirects
 
 ## Supabase
 
-Tables: `profiles`, `bills`, `transactions`, `system_config`, `email_logs`, `referrals`, `ai_insights`, `user_settings`, `annual_fees`. Storage bucket: `bill-documents` (1-hour signed URLs). Migrations live in `supabase/migrations/` (apply with `supabase db push`; 007 is the security-hardening migration and assumes the service-role backend is deployed first).
+Tables: `profiles`, `bills`, `transactions`, `system_config`, `email_logs`, `referrals`, `ai_insights`, `user_settings`, `annual_fees`, `ai_config` (service-role only; admin AI provider/model). Storage bucket: `bill-documents` (1-hour signed URLs). Migrations live in `supabase/migrations/` (apply with `supabase db push`; 007 is the security-hardening migration and assumes the service-role backend is deployed first).
 
 ## Cron (production = Vercel Cron, not node-cron)
 
@@ -110,4 +111,4 @@ Roles: `user`, `pro`, `admin`. `pro` is granted by the verified Stripe webhook (
 
 ## Domain context
 
-Tailored for **Singapore credit-card miles optimization** (The MileLion strategy). Core metric is **miles per dollar (mpd)**; supported banks include DBS, UOB, Citibank, HSBC, OCBC, Standard Chartered, AMEX. The AI extracts/splits consolidated multi-card statements, categorizes spend, flags missed-miles opportunities, and computes a 0–100 risk score. AI runs server-side only: `MILELION_SYSTEM_PROMPT` (the persona) lives in `constants.ts`; the extraction/insights prompts, response schemas, and Gemini calls live in `api/lib/ai.ts`. The browser never holds the Gemini key.
+Tailored for **Singapore credit-card miles optimization** (The MileLion strategy). Core metric is **miles per dollar (mpd)**; supported banks include DBS, UOB, Citibank, HSBC, OCBC, Standard Chartered, AMEX. The AI extracts/splits consolidated multi-card statements, categorizes spend, flags missed-miles opportunities, and computes a 0–100 risk score. AI runs server-side only: `MILELION_SYSTEM_PROMPT` (the persona) lives in `constants.ts`; the extraction/insights prompts, response schemas, and provider calls live in `api/_lib/ai.ts`. Admins pick Gemini or OpenRouter and the model in Admin → AI model. The browser never holds a provider key.
