@@ -6,7 +6,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 Before feature work, follow `.cursor/agents/project-setup.md`. Cursor loads that prompt from `.cursor/rules/session-setup.mdc`. Do not edit until local `HEAD`, `origin/production`, and the live Vercel deployment commit are the same. If this checkout is behind GitHub or Vercel, stop and ask before pulling. Check connections by name only. Do not print secrets, create a new Supabase project, or push `production` unless the user asks in this chat.
 
-The variable list is `.env.example`. `supabase/migrations/` contains only `006`–`008` (alters). The base schema is not in this repo.
+The variable list is `.env.example`. `supabase/migrations/` contains only `006`–`009` (alters). The base schema is not in this repo.
 
 Security audits follow `.cursor/agents/security-auditor.md`. Hand the fix brief to Claude Code in this folder. Claude Code already reads this file and `CLAUDE.md`. Do not deploy as part of the audit.
 
@@ -99,7 +99,9 @@ APP_URL                                 # base URL for links/redirects
 
 ## Supabase
 
-Tables: `profiles`, `bills`, `transactions`, `system_config`, `email_logs`, `referrals`, `ai_insights`, `user_settings`, `annual_fees`, `ai_config` (service-role only; admin AI provider/model). Storage bucket: `bill-documents` (1-hour signed URLs). Migrations live in `supabase/migrations/` (apply with `supabase db push`; 007 is the security-hardening migration and assumes the service-role backend is deployed first).
+Tables: `profiles`, `bills`, `transactions`, `system_config`, `email_logs`, `referrals`, `ai_insights`, `user_settings`, `annual_fees`, `ai_config` (service-role only; admin AI provider/model). Storage bucket: `bill-documents` (1-hour signed URLs). Migrations live in `supabase/migrations/` (`006`–`009`, all alters on the existing live project; 007 is the security-hardening migration and assumes the service-role backend is deployed first).
+
+**Applying a migration to live:** recommend the Supabase dashboard SQL Editor (https://supabase.com/dashboard/project/gaxfdvmqgflsqommdeth/sql/new). The user pastes the migration file and clicks Run; "Success. No rows returned" means it worked. Do not default to `supabase db push`, `psql`, or a direct Postgres script: the CLI and psql are not installed, the direct DB host is IPv6-only, the pooler region is not ap-southeast-1, and the Cursor Supabase MCP is signed into a different account. Write migrations to be idempotent. Afterwards verify with the anon key: `GET /rest/v1/<table>` returning 401 `42501 permission denied` on a service-role-only table confirms it exists and is locked down.
 
 ## Cron (production = Vercel Cron, not node-cron)
 
