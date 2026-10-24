@@ -1,6 +1,7 @@
 import { Type } from "@google/genai";
 import { genai, supabase, STORAGE_BUCKET } from "./clients.js";
 import type { AIExtractionResponse, AiModelConfig } from "../../types";
+import { TRANSACTION_KINDS } from "./billChecks.js";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_TIMEOUT_MS = 120_000;
@@ -55,6 +56,15 @@ You must identify *every* distinct card in this document and create a separate b
 - **Transactions**: Assign transactions only to the card section they appear in.
 - **Card Name**: Use the specific name found in the header (e.g., "DBS Woman's World Mastercard", "DBS Vantage Visa Infinite").
 
+**LINE ITEMS (every line in the card's section):**
+- Include purchases, refunds/reversals, fees, interest, instalments and payments received. Do not skip or merge lines.
+- \`description\`: copy the statement text exactly as printed.
+- \`merchant\`: the clean merchant or brand name (e.g. "GRAB*FOOD 8823 SINGAPORE" → "Grab"). For payments, fees and interest use a short label such as "Payment", "Annual fee", "Interest".
+- \`kind\`: one of purchase, refund, fee, interest, payment, instalment, other.
+- \`amount\`: in SGD. Positive for charges (purchase, fee, interest, instalment). Negative for credits (refund, payment); a "CR" suffix means credit.
+- \`currency\` and \`foreignAmount\`: only for foreign-currency spend — the original currency code (e.g. "USD") and amount.
+- \`previousBalance\`: the previous balance that is included in this card's \`totalAmount\`, or 0 when \`totalAmount\` does not include one (e.g. a DBS card SUB-TOTAL). \`previousBalance\` plus all line items should equal \`totalAmount\`.
+
 Return a JSON object with a 'bills' array containing one object per card found.`;
 
 const EXTRACTION_SCHEMA = {
@@ -68,6 +78,7 @@ const EXTRACTION_SCHEMA = {
           bankName: { type: Type.STRING },
           cardName: { type: Type.STRING },
           totalAmount: { type: Type.NUMBER },
+          previousBalance: { type: Type.NUMBER, description: "Previous balance included in totalAmount; 0 if none" },
           dueDate: { type: Type.STRING, description: "YYYY-MM-DD format" },
           statementDate: { type: Type.STRING, description: "YYYY-MM-DD format" },
           transactions: {
@@ -76,10 +87,15 @@ const EXTRACTION_SCHEMA = {
               type: Type.OBJECT,
               properties: {
                 date: { type: Type.STRING, description: "YYYY-MM-DD format" },
-                description: { type: Type.STRING },
-                amount: { type: Type.NUMBER },
+                description: { type: Type.STRING, description: "Statement text exactly as printed" },
+                merchant: { type: Type.STRING, description: "Clean merchant or brand name" },
+                kind: { type: Type.STRING, format: "enum", enum: [...TRANSACTION_KINDS] },
+                amount: { type: Type.NUMBER, description: "SGD; negative for refunds and payments" },
+                currency: { type: Type.STRING, description: "ISO currency code, foreign-currency spend only" },
+                foreignAmount: { type: Type.NUMBER, description: "Original foreign-currency amount" },
                 category: { type: Type.STRING },
               },
+              required: ["date", "description", "amount", "kind"],
             },
           },
         },
@@ -117,6 +133,7 @@ function toJsonSchema(schema: any): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   if (schema.type) out.type = String(schema.type).toLowerCase();
   if (schema.description) out.description = schema.description;
+  if (schema.enum) out.enum = schema.enum;
   if (schema.properties) {
     out.properties = Object.fromEntries(
       Object.entries(schema.properties).map(([key, value]) => [key, toJsonSchema(value)])

@@ -192,6 +192,8 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
     let grandTotal = 0;
     bills.forEach(bill => {
       bill.transactions.forEach(t => {
+        // Card repayments are not spend; refunds stay in so categories show net spend.
+        if (t.kind === 'payment') return;
         const amount = t.amount;
         categories[t.category] = (categories[t.category] || 0) + amount;
         grandTotal += amount;

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth, requireAdmin } from "../_lib/auth.js";
 import { validate, extractBillSchema, insightsSchema, aiConfigSchema } from "../_lib/validation.js";
 import { extractBillFromStorage, generateInsights, testAiModel } from "../_lib/ai.js";
+import { checkExtraction } from "../_lib/billChecks.js";
 import {
   DEFAULT_AI_CONFIG,
   SUGGESTED_MODELS,
@@ -49,8 +50,8 @@ router.post("/api/extract-bill", requireAuth, async (req: any, res) => {
   }
 
   try {
-    const result = await extractBillFromStorage(filePath, ai);
-    return res.json(result);
+    const result = checkExtraction(await extractBillFromStorage(filePath, ai));
+    return res.json({ ...result, extraction: ai });
   } catch (err: any) {
     console.error(`Error extracting bill data (${ai.provider}/${ai.model}):`, err?.message || err);
     return res.status(500).json({ error: "Bill extraction failed" });

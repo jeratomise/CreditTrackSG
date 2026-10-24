@@ -48,12 +48,22 @@ export interface AiSettings {
   keys: Record<AiProvider, boolean>;
 }
 
+/** Credits (refund, payment) carry negative amounts; every other kind is a charge. */
+export type TransactionKind = 'purchase' | 'refund' | 'fee' | 'interest' | 'payment' | 'instalment' | 'other';
+
+/** auto_verified: line items reconciled to the printed total. confirmed: a person checked it. */
+export type ReviewStatus = 'auto_verified' | 'needs_review' | 'confirmed';
+
 export interface Transaction {
   id: string;
   date: string;
-  description: string;
-  amount: number;
+  description: string; // Statement text exactly as printed
+  amount: number; // SGD; negative for refunds and payments
   category: string;
+  merchant?: string | null;
+  kind?: TransactionKind | null;
+  currency?: string | null; // Foreign-currency spend only
+  foreignAmount?: number | null;
   originalCategory?: string;
   suggestedCard?: string; // Recommendation from AI
   isOptimizationMissed?: boolean;
@@ -79,6 +89,11 @@ export interface Bill {
   filePath?: string | null; // Path to Supabase Storage
   riskScore: number; // 0-100
   reminderEmailId?: string | null; // Resend scheduled email ID for cancellation
+  extractionProvider?: AiProvider | null;
+  extractionModel?: string | null;
+  extractedTotal?: number | null; // Previous balance + line items, as reconciled by the server
+  totalsMatch?: boolean | null;
+  reviewStatus?: ReviewStatus | null;
 }
 
 export interface SpendAnalysis {
@@ -88,22 +103,36 @@ export interface SpendAnalysis {
   missedMilesOpportunity: number; // Estimated miles lost
 }
 
+export interface ParsedTransaction {
+  date: string;
+  description: string;
+  amount: number;
+  category: string;
+  merchant?: string;
+  kind?: TransactionKind;
+  currency?: string;
+  foreignAmount?: number;
+}
+
+export interface BillTotalsCheck {
+  extractedTotal: number;
+  totalsMatch: boolean;
+}
+
 export interface ParsedBillData {
   bankName: string;
   cardName: string;
   totalAmount: number;
+  previousBalance?: number;
   dueDate: string;
   statementDate: string;
-  transactions: {
-    date: string;
-    description: string;
-    amount: number;
-    category: string;
-  }[];
+  transactions: ParsedTransaction[];
+  checks?: BillTotalsCheck; // Added by the server, not the AI
 }
 
 export interface AIExtractionResponse {
   bills: ParsedBillData[];
+  extraction?: AiModelConfig; // Provider and model that read the statement
 }
 
 export interface UserSettings {

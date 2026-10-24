@@ -31,6 +31,11 @@ export const dbService = {
       riskScore: b.risk_score,
       filePath: b.file_path,
       reminderEmailId: b.reminder_email_id,
+      extractionProvider: b.extraction_provider,
+      extractionModel: b.extraction_model,
+      extractedTotal: b.extracted_total,
+      totalsMatch: b.totals_match,
+      reviewStatus: b.review_status,
       paymentDetails: b.is_paid ? {
         paidAt: b.payment_date,
         transactionId: b.transaction_ref,
@@ -42,6 +47,10 @@ export const dbService = {
         description: t.description,
         amount: t.amount,
         category: t.category,
+        merchant: t.merchant,
+        kind: t.kind,
+        currency: t.currency,
+        foreignAmount: t.foreign_amount,
         suggestedCard: t.suggested_card
       }))
     }));
@@ -90,7 +99,12 @@ export const dbService = {
         total_amount: bill.totalAmount,
         is_paid: bill.isPaid,
         file_path: filePath,
-        risk_score: bill.riskScore
+        risk_score: bill.riskScore,
+        extraction_provider: bill.extractionProvider ?? null,
+        extraction_model: bill.extractionModel ?? null,
+        extracted_total: bill.extractedTotal ?? null,
+        totals_match: bill.totalsMatch ?? null,
+        review_status: bill.reviewStatus ?? null
       })
       .select()
       .single();
@@ -111,6 +125,10 @@ export const dbService = {
         description: t.description,
         amount: t.amount,
         category: t.category,
+        merchant: t.merchant ?? null,
+        kind: t.kind ?? null,
+        currency: t.currency ?? null,
+        foreign_amount: t.foreignAmount ?? null,
         suggested_card: t.suggestedCard
       }));
 

@@ -81,12 +81,21 @@ export const BillUploader: React.FC<BillUploaderProps> = ({ onBillProcessed }) =
                 isPaid: false,
                 uploadedAt: new Date().toISOString(),
                 riskScore: 0,
+                extractionProvider: extractedData.extraction?.provider ?? null,
+                extractionModel: extractedData.extraction?.model ?? null,
+                extractedTotal: billData.checks?.extractedTotal ?? null,
+                totalsMatch: billData.checks?.totalsMatch ?? null,
+                reviewStatus: billData.checks ? (billData.checks.totalsMatch ? 'auto_verified' : 'needs_review') : null,
                 transactions: (billData.transactions || []).map((t) => ({
                     id: 'temp',
                     date: t.date,
                     description: t.description,
                     amount: t.amount,
                     category: t.category,
+                    merchant: t.merchant ?? null,
+                    kind: t.kind ?? null,
+                    currency: t.currency ?? null,
+                    foreignAmount: t.foreignAmount ?? null,
                     suggestedCard: "Analyzing...",
                 }))
             };
