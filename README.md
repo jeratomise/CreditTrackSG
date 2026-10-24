@@ -75,28 +75,13 @@ Browser (React SPA)
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and fill in your own values:
+Copy `.env.example` to `.env`. That file is the full list. On Vercel, set the same names in project settings.
 
-```bash
-# Supabase — the VITE_ and non-VITE_ variables are the SAME credentials, declared twice.
-# Vite only exposes variables prefixed with VITE_ to the browser (via import.meta.env).
-# Express reads variables without the prefix via process.env.
-# On Vercel, set both names to the same value in your project settings.
-VITE_SUPABASE_URL=        # e.g. https://xxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=   # your Supabase anon/public key
-SUPABASE_URL=             # same value as VITE_SUPABASE_URL
-SUPABASE_ANON_KEY=        # same value as VITE_SUPABASE_ANON_KEY
+Only two values are public and may use the `VITE_` prefix: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. Repeat them as `SUPABASE_URL` and `SUPABASE_ANON_KEY` for the server.
 
-# Gemini AI (server-side only — keep this secret)
-VITE_GEMINI_API_KEY=
+Gemini, Stripe, Resend, `SUPABASE_SERVICE_ROLE_KEY`, and `CRON_SECRET` are server-only. Do not create `VITE_GEMINI_API_KEY` — Vite would inline it into the browser bundle.
 
-# Resend email (server-side only)
-RESEND_API_KEY=
-EMAIL_FROM=
-
-# Cron job protection
-CRON_SECRET=
-```
+A new Cursor account should follow `.cursor/agents/project-setup.md` (loaded automatically by `.cursor/rules/session-setup.mdc`) instead of pasting keys into chat.
 
 ---
 
@@ -104,8 +89,9 @@ CRON_SECRET=
 
 ```bash
 npm install
-npm run dev     # Vite dev server (frontend + HMR)
-npm start       # Express server (backend, email reminders)
+npm run dev       # API + Vite HMR on :3000 (tsx server.ts)
+npm run typecheck # tsc --noEmit; the Vite build does not type-check
+npm run build     # vite build → dist/
 ```
 
 ---

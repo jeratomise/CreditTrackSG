@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## New machine or new account
+
+On the first task in a fresh checkout, and again before the first edit, follow `.cursor/agents/project-setup.md`. Do not edit until local `HEAD`, `origin/production`, and the live Vercel `githubCommitSha` are the same. If this checkout is behind GitHub or Vercel, stop and ask before pulling. Report missing connections by name. Never print secret values.
+
+Do not create a new Supabase project. `supabase/migrations/` only has `006`–`008`, which alter tables that already exist. Do not push `production` unless the user asks in this chat.
+
+When the user asks for a security audit or a vulnerability fix, follow `.cursor/agents/security-auditor.md`. Apply only the fix brief they approve. Do not deploy as part of the audit. The env contract is `.env.example`. Do not add `VITE_GEMINI_API_KEY`.
+
 ## Commands
 
 ```bash

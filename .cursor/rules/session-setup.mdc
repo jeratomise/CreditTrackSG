@@ -1,0 +1,15 @@
+---
+description: Before any edit, confirm this checkout matches GitHub production and the live Vercel deploy, then finish connection setup.
+alwaysApply: true
+---
+
+# Session setup
+
+On the first message of a session, and again before the first edit in that session:
+
+1. Read `.cursor/agents/project-setup.md` and run the version check, then the connection checklist. Report pass/fail and short commit SHAs only. Never print secret values, tokens, or `.env` contents.
+2. Do not edit, write, or delete project files until local `HEAD`, `origin/production`, and the live Vercel deployment commit are the same. If Vercel cannot be verified, stop and ask the user to log in. Do not pull, reset, or push unless they explicitly agree in this chat.
+3. Before editing a file that already exists on `origin/production`, confirm that path matches `origin/production`. If it does not, stop and show that the file is behind or diverged.
+4. If any required connection is missing or unverified, stop and ask the user to connect it.
+5. Do not create a new Supabase project, run `supabase db push` against an empty database, set `VITE_GEMINI_API_KEY`, commit `.env`, or push the `production` branch unless the user explicitly asks in this chat.
+6. For a security audit or a vulnerability fix, read `.cursor/agents/security-auditor.md`. It writes a fix brief for Claude Code. It does not deploy.
