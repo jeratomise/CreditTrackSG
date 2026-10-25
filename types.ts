@@ -91,9 +91,21 @@ export interface Bill {
   reminderEmailId?: string | null; // Resend scheduled email ID for cancellation
   extractionProvider?: AiProvider | null;
   extractionModel?: string | null;
+  previousBalance?: number | null; // Carried-in balance included in totalAmount
   extractedTotal?: number | null; // Previous balance + line items, as reconciled by the server
   totalsMatch?: boolean | null;
   reviewStatus?: ReviewStatus | null;
+  reviewedAt?: string | null;
+}
+
+/** One change a user made while reviewing a statement (`extraction_corrections`). */
+export interface ExtractionCorrection {
+  billId: string;
+  transactionId: string | null;
+  action: 'edit' | 'add' | 'delete';
+  field: string | null;
+  beforeValue: string | null;
+  afterValue: string | null;
 }
 
 export interface SpendAnalysis {

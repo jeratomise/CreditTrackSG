@@ -1,9 +1,22 @@
 
 import { supabase } from '../lib/supabaseClient';
 import { Bill, Transaction, SystemConfig, PaymentDetails, User } from '../types';
+import { diffBillReview } from './reviewDiff';
 
 /** `system_config` holds a single row; every read and write targets it by id. */
 const SYSTEM_CONFIG_ROW_ID = 1;
+
+/** Maps the reviewable line-item fields to `transactions` columns, skipping absent ones. */
+function toTransactionRow(t: Partial<Transaction>): Record<string, unknown> {
+  const row: Record<string, unknown> = {};
+  if ('date' in t) row.date = t.date;
+  if ('description' in t) row.description = t.description;
+  if ('merchant' in t) row.merchant = t.merchant ?? null;
+  if ('category' in t) row.category = t.category;
+  if ('kind' in t) row.kind = t.kind ?? null;
+  if ('amount' in t) row.amount = t.amount;
+  return row;
+}
 
 export const dbService = {
   // --- Bills ---
@@ -36,6 +49,8 @@ export const dbService = {
       extractedTotal: b.extracted_total,
       totalsMatch: b.totals_match,
       reviewStatus: b.review_status,
+      reviewedAt: b.reviewed_at,
+      previousBalance: b.previous_balance,
       paymentDetails: b.is_paid ? {
         paidAt: b.payment_date,
         transactionId: b.transaction_ref,
@@ -102,6 +117,7 @@ export const dbService = {
         risk_score: bill.riskScore,
         extraction_provider: bill.extractionProvider ?? null,
         extraction_model: bill.extractionModel ?? null,
+        previous_balance: bill.previousBalance ?? null,
         extracted_total: bill.extractedTotal ?? null,
         totals_match: bill.totalsMatch ?? null,
         review_status: bill.reviewStatus ?? null
@@ -158,6 +174,64 @@ export const dbService = {
       })
       .eq('id', bill.id);
 
+    if (error) throw error;
+  },
+
+  /**
+   * Saves a reviewed statement: line-item changes, then the corrections log, then
+   * marks the bill confirmed last so a failure part-way leaves it open for review.
+   */
+  async confirmBillReview(original: Bill, edited: Bill): Promise<void> {
+    const diff = diffBillReview(original, edited);
+
+    if (diff.deletes.length > 0) {
+      const { error } = await supabase.from('transactions').delete().in('id', diff.deletes);
+      if (error) throw error;
+    }
+
+    for (const { id, patch } of diff.updates) {
+      const { error } = await supabase.from('transactions').update(toTransactionRow(patch)).eq('id', id);
+      if (error) throw error;
+    }
+
+    if (diff.inserts.length > 0) {
+      const { data, error } = await supabase
+        .from('transactions')
+        .insert(diff.inserts.map(t => ({ bill_id: original.id, ...toTransactionRow(t) })))
+        .select('id');
+      if (error) throw error;
+      const addCorrections = diff.corrections.filter(c => c.action === 'add');
+      addCorrections.forEach((c, i) => { c.transactionId = data?.[i]?.id ?? null; });
+    }
+
+    if (diff.corrections.length > 0) {
+      const { error } = await supabase.from('extraction_corrections').insert(
+        diff.corrections.map(c => ({
+          bill_id: c.billId,
+          transaction_id: c.transactionId,
+          action: c.action,
+          field: c.field,
+          before_value: c.beforeValue,
+          after_value: c.afterValue,
+          bank_name: original.bankName,
+          provider: original.extractionProvider ?? null,
+          model: original.extractionModel ?? null,
+        }))
+      );
+      if (error) throw error;
+    }
+
+    const { error } = await supabase
+      .from('bills')
+      .update({
+        ...('statementDate' in diff.billPatch && { statement_date: diff.billPatch.statementDate }),
+        ...('dueDate' in diff.billPatch && { due_date: diff.billPatch.dueDate }),
+        ...('totalAmount' in diff.billPatch && { total_amount: diff.billPatch.totalAmount }),
+        previous_balance: edited.previousBalance ?? 0,
+        review_status: 'confirmed',
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq('id', original.id);
     if (error) throw error;
   },
 

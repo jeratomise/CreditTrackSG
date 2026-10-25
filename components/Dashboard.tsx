@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Bill, PaymentDetails } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer, Tooltip } from 'recharts';
-import { AlertTriangle, CheckCircle, Clock, Plus, TrendingUp, Pencil, FileText, Calendar, Trash2, Globe } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, Plus, TrendingUp, Pencil, FileText, Calendar, Trash2, Globe, ListChecks } from 'lucide-react';
 import { PaymentModal } from './PaymentModal';
 import { EditBillModal } from './EditBillModal';
 import { AlertModal } from './AlertModal';
@@ -15,6 +15,7 @@ interface DashboardProps {
   onUpdateBill: (bill: Bill) => void;
   onAddBill: (bill: Bill) => void;
   onDeleteBill: (billId: string) => void;
+  onReviewBill?: (bill: Bill) => void;
   onOpenManualModal?: () => void;
 }
 
@@ -165,7 +166,7 @@ const Sparkline: React.FC<{ values: number[] }> = ({ values }) => {
   );
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAddBill, onDeleteBill, onOpenManualModal }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ bills, onUpdateBill, onAddBill, onDeleteBill, onReviewBill, onOpenManualModal }) => {
   const [selectedBillForPayment, setSelectedBillForPayment] = useState<Bill | null>(null);
   const [billToEdit, setBillToEdit] = useState<Bill | null>(null);
   // Default to the latest month with bills (lazy init to avoid flicker on first render)
@@ -689,6 +690,17 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
                           <FileText className="w-4 h-4" strokeWidth={1.5} />
                         </button>
                       )}
+                      {onReviewBill && (
+                        <button
+                          onClick={() => onReviewBill(bill)}
+                          aria-label="Review line items"
+                          className={`w-12 h-12 flex items-center justify-center border transition-colors duration-150 ${
+                            bill.reviewStatus === 'needs_review' ? 'text-warning border-warning/40' : 'text-ink-mute hover:text-brass-400 border-brass-500/20'
+                          }`}
+                        >
+                          <ListChecks className="w-4 h-4" strokeWidth={1.5} />
+                        </button>
+                      )}
                       <button
                         onClick={() => setBillToEdit(bill)}
                         aria-label="Edit bill"
@@ -794,6 +806,19 @@ const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
                                                     </span>
                                                 )}
                                             </div>
+                                          )}
+
+                                          {onReviewBill && (
+                                            <button
+                                              onClick={() => onReviewBill(bill)}
+                                              aria-label="Review line items"
+                                              className={bill.reviewStatus === 'needs_review'
+                                                ? 'w-10 h-10 flex items-center justify-center text-warning hover:text-brass-400 transition-colors duration-150'
+                                                : iconButtonClass}
+                                              title={bill.reviewStatus === 'needs_review' ? 'Lines need checking' : 'Review line items'}
+                                            >
+                                              <ListChecks className="w-4 h-4" strokeWidth={1.5} />
+                                            </button>
                                           )}
 
                                           <button

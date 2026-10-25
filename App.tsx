@@ -12,9 +12,10 @@ import { Bill } from './types';
 import { EmailLogs } from './components/EmailLogs';
 import { ReferralPage } from './components/ReferralPage';
 import { FloatingShareBar } from './components/FloatingShareBar';
+import { BillReview } from './components/BillReview';
 import {
   LayoutDashboard, PieChart, Settings as SettingsIcon, LogOut,
-  LockKeyhole, Mail, Plus, Upload, ChevronRight, Sparkles, Share2
+  LockKeyhole, Mail, Plus, Upload, ChevronRight, Sparkles, Share2, ListChecks
 } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
 import { dbService } from './services/dbService';
@@ -92,7 +93,13 @@ const StatusIndicator: React.FC = () => {
   );
 };
 
-type ViewType = 'dashboard' | 'upload' | 'settings' | 'admin' | 'logs' | 'referral';
+type ViewType = 'dashboard' | 'upload' | 'settings' | 'admin' | 'logs' | 'referral' | 'review';
+
+/** Bills the user hasn't confirmed yet; ones that failed a check come first. Pre-review bills (null) are left alone. */
+const unreviewedBills = (bills: Bill[]): Bill[] => [
+  ...bills.filter(b => b.reviewStatus === 'needs_review'),
+  ...bills.filter(b => b.reviewStatus === 'auto_verified'),
+];
 
 const App: React.FC = () => {
   const { user, logout, loading: authLoading } = useAuth();
@@ -102,6 +109,8 @@ const App: React.FC = () => {
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [isFabOpen, setIsFabOpen] = useState(false);
   const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
+  const [reviewQueue, setReviewQueue] = useState<string[]>([]);
+  const [reviewIndex, setReviewIndex] = useState(0);
   const avatarRef = useRef<HTMLDivElement>(null);
 
   // Close avatar menu when clicking outside
@@ -135,12 +144,43 @@ const App: React.FC = () => {
     }
   };
 
+  const startReview = (billIds: string[]) => {
+    if (billIds.length === 0) return;
+    setReviewQueue(billIds);
+    setReviewIndex(0);
+    setView('review');
+  };
+
+  const nextReview = () => {
+    if (reviewIndex + 1 < reviewQueue.length) {
+      setReviewIndex(reviewIndex + 1);
+    } else {
+      setReviewQueue([]);
+      setView('dashboard');
+    }
+  };
+
+  const handleConfirmReview = async (original: Bill, edited: Bill) => {
+    await dbService.confirmBillReview(original, edited);
+    const reminderChanged = original.dueDate !== edited.dueDate || original.totalAmount !== edited.totalAmount;
+    if (!edited.isPaid && reminderChanged) {
+      if (original.reminderEmailId) dbService.cancelReminder(original.reminderEmailId);
+      dbService.scheduleReminder(edited, user!);
+    }
+    await refreshBills();
+    nextReview();
+  };
+
   const handleBillsProcessed = async (newBills: Bill[]) => {
     await refreshBills();
     for (const bill of newBills.filter(b => !b.isPaid)) {
       dbService.scheduleReminder(bill, user!);
     }
-    setView('dashboard');
+    if (newBills.length > 0) {
+      startReview(newBills.map(b => b.id));
+    } else {
+      setView('dashboard');
+    }
   };
 
   const handleUpdateBill = async (updatedBill: Bill) => {
@@ -397,6 +437,24 @@ const App: React.FC = () => {
                 </div>
               </header>
 
+              {unreviewedBills(bills).length > 0 && (
+                <div className="flex items-center justify-between gap-4 bg-marine-700 border border-brass-500/25 px-4 py-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <ListChecks className="w-4 h-4 text-brass-400 shrink-0" strokeWidth={1.5} />
+                    <p className="text-sm text-ink-soft">
+                      <span className="font-mono tabular-nums">{unreviewedBills(bills).length}</span>
+                      {unreviewedBills(bills).length === 1 ? ' card is' : ' cards are'} waiting for you to check the lines.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => startReview(unreviewedBills(bills).map(b => b.id))}
+                    className="shrink-0 text-sm font-medium border border-brass-500/40 text-brass-300 px-4 py-2 hover:border-brass-500 transition-colors duration-150 min-h-[40px]"
+                  >
+                    Review now
+                  </button>
+                </div>
+              )}
+
               {dataLoading && bills.length === 0 ? (
                 <div className="h-40 flex items-center justify-center font-mono text-[11px] uppercase tracking-[0.14em] text-ink-mute">Loading your data</div>
               ) : (
@@ -407,6 +465,7 @@ const App: React.FC = () => {
                     onUpdateBill={handleUpdateBill}
                     onAddBill={handleAddBill}
                     onDeleteBill={handleDeleteBill}
+                    onReviewBill={bill => startReview([bill.id])}
                     onOpenManualModal={() => setIsManualModalOpen(true)}
                   />
                 </>
@@ -429,6 +488,28 @@ const App: React.FC = () => {
               <BillUploader onBillProcessed={handleBillsProcessed} />
             </div>
           )}
+
+          {view === 'review' && (() => {
+            const bill = bills.find(b => b.id === reviewQueue[reviewIndex]);
+            if (!bill) {
+              return (
+                <div className="h-40 flex flex-col items-center justify-center gap-3 text-sm text-ink-mute">
+                  This statement is no longer available.
+                  <button onClick={nextReview} className="text-brass-300 hover:text-brass-400 min-h-[40px]">Continue</button>
+                </div>
+              );
+            }
+            return (
+              <BillReview
+                key={bill.id}
+                bill={bill}
+                position={{ index: reviewIndex, total: reviewQueue.length }}
+                knownCategories={Array.from(new Set(bills.flatMap(b => b.transactions.map(t => t.category))))}
+                onConfirm={handleConfirmReview}
+                onSkip={nextReview}
+              />
+            );
+          })()}
 
           {view === 'logs' && <EmailLogs />}
           {view === 'settings' && <Settings />}
