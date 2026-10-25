@@ -114,9 +114,10 @@ export interface ParsedTransaction {
   foreignAmount?: number;
 }
 
-export interface BillTotalsCheck {
+export interface BillChecks {
   extractedTotal: number;
   totalsMatch: boolean;
+  datesOk: boolean; // Statement is recent and due/line-item dates fit its billing cycle
 }
 
 export interface ParsedBillData {
@@ -127,7 +128,7 @@ export interface ParsedBillData {
   dueDate: string;
   statementDate: string;
   transactions: ParsedTransaction[];
-  checks?: BillTotalsCheck; // Added by the server, not the AI
+  checks?: BillChecks; // Added by the server, not the AI
 }
 
 export interface AIExtractionResponse {

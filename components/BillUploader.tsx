@@ -85,7 +85,9 @@ export const BillUploader: React.FC<BillUploaderProps> = ({ onBillProcessed }) =
                 extractionModel: extractedData.extraction?.model ?? null,
                 extractedTotal: billData.checks?.extractedTotal ?? null,
                 totalsMatch: billData.checks?.totalsMatch ?? null,
-                reviewStatus: billData.checks ? (billData.checks.totalsMatch ? 'auto_verified' : 'needs_review') : null,
+                reviewStatus: billData.checks
+                    ? (billData.checks.totalsMatch && billData.checks.datesOk ? 'auto_verified' : 'needs_review')
+                    : null,
                 transactions: (billData.transactions || []).map((t) => ({
                     id: 'temp',
                     date: t.date,

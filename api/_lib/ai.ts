@@ -1,7 +1,7 @@
 import { Type } from "@google/genai";
 import { genai, supabase, STORAGE_BUCKET } from "./clients.js";
 import type { AIExtractionResponse, AiModelConfig } from "../../types";
-import { TRANSACTION_KINDS } from "./billChecks.js";
+import { TRANSACTION_KINDS, todayInSingapore } from "./billChecks.js";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_TIMEOUT_MS = 120_000;
@@ -37,7 +37,7 @@ function mimeTypeFromPath(filePath: string): string {
   return "application/pdf";
 }
 
-const EXTRACTION_PROMPT = `Analyze this credit card statement. It is likely a CONSOLIDATED STATEMENT containing multiple cards.
+const extractionPrompt = (today: string) => `Analyze this credit card statement. It is likely a CONSOLIDATED STATEMENT containing multiple cards.
 
 **CRITICAL: SPLIT BY CARD**
 You must identify *every* distinct card in this document and create a separate bill entry for each.
@@ -64,6 +64,13 @@ You must identify *every* distinct card in this document and create a separate b
 - \`amount\`: in SGD. Positive for charges (purchase, fee, interest, instalment). Negative for credits (refund, payment); a "CR" suffix means credit.
 - \`currency\` and \`foreignAmount\`: only for foreign-currency spend — the original currency code (e.g. "USD") and amount.
 - \`previousBalance\`: the previous balance that is included in this card's \`totalAmount\`, or 0 when \`totalAmount\` does not include one (e.g. a DBS card SUB-TOTAL). \`previousBalance\` plus all line items should equal \`totalAmount\`.
+
+**DATES:**
+- Today's date is ${today} (Singapore). Statements are usually from the last few months, and the due date is usually 2–4 weeks after the statement date.
+- Output every date as YYYY-MM-DD. When a year is printed with the date, copy it exactly (e.g. "Due Date 02 NOV 2026" → "2026-11-02"). Never replace a printed year.
+- \`statementDate\` is the "Statement Date". \`dueDate\` is the "Payment Due Date", "Due Date" or "Please pay by" date.
+- Line-item dates are often printed without a year (e.g. "15 SEP"). Take the year from the statement date; a month later than the statement month belongs to the previous year (e.g. "28 DEC" on a statement dated 12 JAN 2027 → "2026-12-28").
+- Ignore years in notices, terms and promotions (e.g. "W.E.F 1 Jun 2023"); they are not statement dates.
 
 Return a JSON object with a 'bills' array containing one object per card found.`;
 
@@ -218,6 +225,7 @@ export async function extractBillFromStorage(filePath: string, ai: AiModelConfig
 
   const mimeType = mimeTypeFromPath(filePath);
   const base64Data = Buffer.from(await fileBlob.arrayBuffer()).toString("base64");
+  const prompt = extractionPrompt(todayInSingapore());
 
   if (ai.provider === "openrouter") {
     const dataUrl = `data:${mimeType};base64,${base64Data}`;
@@ -227,7 +235,7 @@ export async function extractBillFromStorage(filePath: string, ai: AiModelConfig
         : { type: "image_url", image_url: { url: dataUrl } };
     return (await callOpenRouter(
       ai.model,
-      [filePart, { type: "text", text: EXTRACTION_PROMPT }],
+      [filePart, { type: "text", text: prompt }],
       "bill_extraction",
       EXTRACTION_SCHEMA
     )) as AIExtractionResponse;
@@ -238,7 +246,7 @@ export async function extractBillFromStorage(filePath: string, ai: AiModelConfig
     {
       parts: [
         { inlineData: { mimeType, data: base64Data } },
-        { text: EXTRACTION_PROMPT },
+        { text: prompt },
       ],
     },
     EXTRACTION_SCHEMA
