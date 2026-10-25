@@ -83,7 +83,7 @@ export const BillUploader: React.FC<BillUploaderProps> = ({ onBillProcessed }) =
                 riskScore: 0,
                 extractionProvider: extractedData.extraction?.provider ?? null,
                 extractionModel: extractedData.extraction?.model ?? null,
-                previousBalance: billData.previousBalance ?? null,
+                previousBalance: billData.checks?.carriedBalance ?? null,
                 extractedTotal: billData.checks?.extractedTotal ?? null,
                 totalsMatch: billData.checks?.totalsMatch ?? null,
                 reviewStatus: billData.checks

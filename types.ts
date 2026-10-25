@@ -91,7 +91,7 @@ export interface Bill {
   reminderEmailId?: string | null; // Resend scheduled email ID for cancellation
   extractionProvider?: AiProvider | null;
   extractionModel?: string | null;
-  previousBalance?: number | null; // Carried-in balance included in totalAmount
+  previousBalance?: number | null; // Unpaid previous balance included in totalAmount (after payments)
   extractedTotal?: number | null; // Previous balance + line items, as reconciled by the server
   totalsMatch?: boolean | null;
   reviewStatus?: ReviewStatus | null;
@@ -130,6 +130,7 @@ export interface BillChecks {
   extractedTotal: number;
   totalsMatch: boolean;
   datesOk: boolean; // Statement is recent and due/line-item dates fit its billing cycle
+  carriedBalance: number; // Unpaid previous balance included in the total (previous balance − payments, or 0)
 }
 
 export interface ParsedBillData {
@@ -137,6 +138,7 @@ export interface ParsedBillData {
   cardName: string;
   totalAmount: number;
   previousBalance?: number;
+  paymentsReceived?: number; // Repayments credited this statement; never listed as line items
   dueDate: string;
   statementDate: string;
   transactions: ParsedTransaction[];

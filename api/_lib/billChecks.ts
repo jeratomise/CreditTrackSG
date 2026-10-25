@@ -1,5 +1,6 @@
 // Server-side checks on AI-extracted bills. The AI's line items are only trusted
 // when they add back up to the printed total and the dates fit a billing cycle.
+// Line items are spend only: card repayments and balance rows never become transactions.
 import type { AIExtractionResponse, ParsedBillData, ParsedTransaction, TransactionKind } from "../../types";
 
 export const TRANSACTION_KINDS: readonly TransactionKind[] = [
@@ -58,13 +59,52 @@ function fitYear(date: Date, anchor: Date, window: { min: number; max: number })
   return candidates.length === 1 ? candidates[0] : null;
 }
 
+// Statement rows that are balances, not transactions.
+const SUMMARY_ROW = /^\s*(previous|prev\.?|last statement|opening|new|closing)\s+balance\b|\bsub[\s-]?total\b|^\s*total\s+(balance|amount|due|for)\b/i;
+// Card repayments: "PAYMT THRU E-BANK", "PAYMENT - THANK YOU", "GIRO PAYMENT". Only credits match,
+// so a bill paid with the card (e.g. "AXS PAYMENT", a charge) stays a purchase.
+const REPAYMENT_TEXT = /\bpaym(en)?t\b|\bthank\s*you\b/i;
+
 function normaliseTransaction(t: ParsedTransaction): ParsedTransaction {
   const amount = Number(t.amount) || 0;
-  const kind: TransactionKind =
+  let kind: TransactionKind =
     t.kind && TRANSACTION_KINDS.includes(t.kind) ? t.kind : amount < 0 ? "refund" : "purchase";
+  const isCredit = amount < 0 || CREDIT_KINDS.includes(kind);
+  if (kind !== "payment" && isCredit && REPAYMENT_TEXT.test(t.description ?? "")) kind = "payment";
   // Models sometimes print credits as positive "CR" amounts; credits must reduce the balance.
   const signed = CREDIT_KINDS.includes(kind) && amount > 0 ? -amount : amount;
   return { ...t, amount: signed, kind };
+}
+
+/**
+ * Payments to the card are not spend, so they are dropped from the line items and
+ * kept only as a bill-level total for the reconciliation.
+ */
+function splitPayments(bill: ParsedBillData) {
+  const lines = (bill.transactions || [])
+    .filter(t => !SUMMARY_ROW.test(t.description ?? ""))
+    .map(normaliseTransaction);
+  const paymentLines = lines.filter(t => t.kind === "payment");
+  const fromLines = round2(paymentLines.reduce((sum, t) => sum + Math.abs(t.amount), 0));
+  const reported = Math.abs(Number(bill.paymentsReceived) || 0);
+  return {
+    transactions: lines.filter(t => t.kind !== "payment"),
+    // If the model both listed the payments and totalled them, they are the same payments.
+    paymentsReceived: reported > 0 ? reported : fromLines,
+  };
+}
+
+/**
+ * Amount due = previous balance − payments + new lines. When the last bill was paid in
+ * full the first two cancel, and many statements' card totals list new lines only, so a
+ * bill also reconciles if its lines alone add up to the printed total.
+ */
+function reconcile(printedTotal: number, lineSum: number, previousBalance: number, paymentsReceived: number) {
+  const matches = (carried: number) =>
+    Number.isFinite(printedTotal) && Math.abs(round2(carried + lineSum) - printedTotal) <= TOTALS_TOLERANCE;
+  const fullCarried = round2(previousBalance - paymentsReceived);
+  const carriedBalance = matches(fullCarried) ? fullCarried : matches(0) ? 0 : fullCarried;
+  return { carriedBalance, extractedTotal: round2(carriedBalance + lineSum), totalsMatch: matches(carriedBalance) };
 }
 
 /**
@@ -97,16 +137,23 @@ function checkDates(bill: ParsedBillData, transactions: ParsedTransaction[], tod
 }
 
 function checkBill(bill: ParsedBillData, today: Date): ParsedBillData {
-  const signed = (bill.transactions || []).map(normaliseTransaction);
-  const lineItemSum = signed.reduce((sum, t) => sum + t.amount, 0);
-  const extractedTotal = round2((Number(bill.previousBalance) || 0) + lineItemSum);
-  const printedTotal = Number(bill.totalAmount);
-  const totalsMatch = Number.isFinite(printedTotal) && Math.abs(extractedTotal - printedTotal) <= TOTALS_TOLERANCE;
-  const { dueDate, transactions, datesOk } = checkDates(bill, signed, today);
-  return { ...bill, dueDate, transactions, checks: { extractedTotal, totalsMatch, datesOk } };
+  const { transactions: lines, paymentsReceived } = splitPayments(bill);
+  const lineSum = lines.reduce((sum, t) => sum + t.amount, 0);
+  const previousBalance = Number(bill.previousBalance) || 0;
+  const { carriedBalance, extractedTotal, totalsMatch } =
+    reconcile(Number(bill.totalAmount), lineSum, previousBalance, paymentsReceived);
+  const { dueDate, transactions, datesOk } = checkDates(bill, lines, today);
+  return {
+    ...bill,
+    dueDate,
+    transactions,
+    previousBalance,
+    paymentsReceived,
+    checks: { extractedTotal, totalsMatch, datesOk, carriedBalance },
+  };
 }
 
-/** Normalise line items, repair date years, and reconcile each bill against its printed total. */
+/** Drop payments, normalise line items, repair date years, and reconcile each bill against its printed total. */
 export function checkExtraction(result: AIExtractionResponse, today = todayInSingapore()): AIExtractionResponse {
   const todayDate = parseIsoDay(today) ?? new Date();
   return { ...result, bills: (result.bills || []).map(b => checkBill(b, todayDate)) };

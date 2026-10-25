@@ -56,14 +56,18 @@ You must identify *every* distinct card in this document and create a separate b
 - **Transactions**: Assign transactions only to the card section they appear in.
 - **Card Name**: Use the specific name found in the header (e.g., "DBS Woman's World Mastercard", "DBS Vantage Visa Infinite").
 
-**LINE ITEMS (every line in the card's section):**
-- Include purchases, refunds/reversals, fees, interest, instalments and payments received. Do not skip or merge lines.
+**LINE ITEMS (every spend line in the card's section):**
+- Include purchases, merchant refunds/reversals, fees, interest and instalments. Do not skip or merge lines.
+- Do NOT list payments made to the card (e.g. "PAYMT THRU E-BANK", "PAYMENT - THANK YOU", "GIRO PAYMENT") as line items. Add them up into \`paymentsReceived\` instead.
+- Do NOT list balance rows ("PREVIOUS BALANCE", "SUB TOTAL", "TOTAL BALANCE") as line items.
 - \`description\`: copy the statement text exactly as printed.
-- \`merchant\`: the clean merchant or brand name (e.g. "GRAB*FOOD 8823 SINGAPORE" → "Grab"). For payments, fees and interest use a short label such as "Payment", "Annual fee", "Interest".
-- \`kind\`: one of purchase, refund, fee, interest, payment, instalment, other.
-- \`amount\`: in SGD. Positive for charges (purchase, fee, interest, instalment). Negative for credits (refund, payment); a "CR" suffix means credit.
+- \`merchant\`: the clean merchant or brand name (e.g. "GRAB*FOOD 8823 SINGAPORE" → "Grab"). For fees and interest use a short label such as "Annual fee", "Interest".
+- \`kind\`: one of purchase, refund, fee, interest, instalment, other.
+- \`amount\`: in SGD. Positive for charges (purchase, fee, interest, instalment). Negative for merchant refunds; a "CR" suffix means credit.
 - \`currency\` and \`foreignAmount\`: only for foreign-currency spend — the original currency code (e.g. "USD") and amount.
-- \`previousBalance\`: the previous balance that is included in this card's \`totalAmount\`, or 0 when \`totalAmount\` does not include one (e.g. a DBS card SUB-TOTAL). \`previousBalance\` plus all line items should equal \`totalAmount\`.
+- \`previousBalance\`: the "PREVIOUS BALANCE" printed for this card, or 0 if none is shown.
+- \`paymentsReceived\`: the total of payments made to this card on this statement, as a positive number, or 0.
+- Usually \`previousBalance\` − \`paymentsReceived\` + all line items = \`totalAmount\`.
 
 **DATES:**
 - Today's date is ${today} (Singapore). Statements are usually from the last few months, and the due date is usually 2–4 weeks after the statement date.
@@ -85,7 +89,8 @@ const EXTRACTION_SCHEMA = {
           bankName: { type: Type.STRING },
           cardName: { type: Type.STRING },
           totalAmount: { type: Type.NUMBER },
-          previousBalance: { type: Type.NUMBER, description: "Previous balance included in totalAmount; 0 if none" },
+          previousBalance: { type: Type.NUMBER, description: "PREVIOUS BALANCE printed for this card; 0 if none" },
+          paymentsReceived: { type: Type.NUMBER, description: "Total payments made to the card this statement, positive; 0 if none" },
           dueDate: { type: Type.STRING, description: "YYYY-MM-DD format" },
           statementDate: { type: Type.STRING, description: "YYYY-MM-DD format" },
           transactions: {
@@ -97,7 +102,7 @@ const EXTRACTION_SCHEMA = {
                 description: { type: Type.STRING, description: "Statement text exactly as printed" },
                 merchant: { type: Type.STRING, description: "Clean merchant or brand name" },
                 kind: { type: Type.STRING, format: "enum", enum: [...TRANSACTION_KINDS] },
-                amount: { type: Type.NUMBER, description: "SGD; negative for refunds and payments" },
+                amount: { type: Type.NUMBER, description: "SGD; negative for refunds" },
                 currency: { type: Type.STRING, description: "ISO currency code, foreign-currency spend only" },
                 foreignAmount: { type: Type.NUMBER, description: "Original foreign-currency amount" },
                 category: { type: Type.STRING },

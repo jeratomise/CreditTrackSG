@@ -119,6 +119,12 @@ export const BillReview: React.FC<BillReviewProps> = ({ bill, position, knownCat
   };
 
   const removeRow = (key: string) => {
+    const row = rows.find(r => r.key === key);
+    // A repayment is part of the balance, not spend: fold it in so the tally doesn't move.
+    if (row?.kind === 'payment') {
+      const paid = signedAmount('payment', parseAmount(row.amount) ?? 0);
+      setPreviousBalance(String(round2((parseAmount(previousBalance) ?? 0) + paid)));
+    }
     setRows(prev => prev.filter(r => r.key !== key));
     setConfirmMismatch(false);
   };
@@ -229,7 +235,7 @@ export const BillReview: React.FC<BillReviewProps> = ({ bill, position, knownCat
               onChange={e => { setTotalAmount(e.target.value); setConfirmMismatch(false); }} />
           </div>
           <div>
-            <label className={labelClass} htmlFor="review-previous">Previous balance (S$)</label>
+            <label className={labelClass} htmlFor="review-previous" title="Previous balance minus payments made. 0 if you paid the last bill in full.">Unpaid previous (S$)</label>
             <input id="review-previous" inputMode="decimal" className={`${fieldClass} font-mono tabular-nums`} value={previousBalance}
               onChange={e => { setPreviousBalance(e.target.value); setConfirmMismatch(false); }} />
           </div>
@@ -237,7 +243,7 @@ export const BillReview: React.FC<BillReviewProps> = ({ bill, position, knownCat
 
         <div className="mt-5 pt-4 border-t border-brass-500/10 flex flex-wrap items-center justify-between gap-3 text-sm">
           <p className="text-ink-soft">
-            Previous balance <span className="font-mono tabular-nums text-ink">{money(carried)}</span>
+            Unpaid previous <span className="font-mono tabular-nums text-ink">{money(carried)}</span>
             {' + '}lines <span className="font-mono tabular-nums text-ink">{money(lineSum)}</span>
             {' = '}<span className="font-mono tabular-nums text-ink">{money(reconciled)}</span>
           </p>
@@ -293,9 +299,9 @@ export const BillReview: React.FC<BillReviewProps> = ({ bill, position, knownCat
               <select aria-label={`Line ${i + 1} type`} className={cellClass} value={r.kind}
                 onChange={e => updateRow(r.key, { kind: e.target.value as TransactionKind | '' })}>
                 {!r.kind && <option value="">—</option>}
-                {(Object.keys(KIND_LABELS) as TransactionKind[]).map(k => (
-                  <option key={k} value={k}>{KIND_LABELS[k]}</option>
-                ))}
+                {(Object.keys(KIND_LABELS) as TransactionKind[])
+                  .filter(k => k !== 'payment' || r.kind === 'payment')
+                  .map(k => <option key={k} value={k}>{KIND_LABELS[k]}</option>)}
               </select>
               <input inputMode="decimal" aria-label={`Line ${i + 1} amount`} className={`${cellClass} font-mono tabular-nums text-right`}
                 value={r.amount} onChange={e => updateRow(r.key, { amount: e.target.value })} />
@@ -312,7 +318,7 @@ export const BillReview: React.FC<BillReviewProps> = ({ bill, position, knownCat
             <Plus className="w-4 h-4 text-brass-400" strokeWidth={1.5} />
             Add a line
           </button>
-          <p className="text-xs text-ink-mute">Refunds and payments are saved as negative amounts.</p>
+          <p className="text-xs text-ink-mute">Refunds are saved as negative amounts. Payments to the card aren't spend: delete them and the balance adjusts.</p>
         </div>
       </section>
 
